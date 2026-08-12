@@ -1,11 +1,12 @@
 <script>
   import { onMount } from 'svelte';
   import Markdown from './Markdown.svelte';
-  import { ApiError, api, copyText, downloadJson, mergeBlocks } from '../lib/api.js';
+  import { ApiError, api, copyText, downloadJson } from '../lib/api.js';
 
   export let secret;
 
   let snapshot = null;
+  let artifactTypes = [];
   let revisions = [];
   let selected = [];
   let activeTab = 'blocks';
@@ -14,21 +15,26 @@
   let error = '';
   let deleted = false;
   let locked = false;
-  let newBlock = { title: '', content: '' };
+  let newBlock = null;
   let bundleName = '';
   let dragId = '';
   let target = { kind: 'ntfy', url: '', headers: '{}' };
 
   $: blocks = snapshot?.blocks || [];
   $: bundles = snapshot?.bundles || [];
-  $: selectedOutput = mergeBlocks(blocks, selected);
+  $: selectedType = newBlock ? typeFor(newBlock.block_type) : null;
 
   onMount(load);
 
   async function load() {
     error = '';
     try {
-      snapshot = await api('/vault', { secret });
+      const [nextSnapshot, types] = await Promise.all([
+        api('/vault', { secret }),
+        api('/artifact-types')
+      ]);
+      snapshot = nextSnapshot;
+      artifactTypes = types;
       deleted = false;
       locked = false;
       if (activeTab === 'history') await loadRevisions();
@@ -37,6 +43,18 @@
       else if (requestError instanceof ApiError && requestError.status === 423) locked = true;
       else error = requestError.message;
     }
+  }
+
+  function typeFor(key) {
+    return artifactTypes.find((item) => item.key === (key || 'prompt')) || artifactTypes[0];
+  }
+
+  function startTypedBlock(type) {
+    newBlock = {
+      block_type: type.key,
+      title: type.default_title,
+      content: type.template
+    };
   }
 
   async function run(action, success = '已儲存') {
@@ -65,15 +83,15 @@
     await run(async () => {
       const block = await api('/blocks?source=web', { method: 'POST', body: newBlock, secret });
       snapshot = { ...snapshot, blocks: [...blocks, block] };
-      newBlock = { title: '', content: '' };
-    }, 'Block 已建立');
+      newBlock = null;
+    }, '型別化資產已建立');
   }
 
   async function saveBlock(block) {
     await run(async () => {
       const updated = await api(`/blocks/${block.id}?source=web`, {
         method: 'PATCH',
-        body: { title: block.title, content: block.content, position: block.position, version: block.version },
+        body: { block_type: block.block_type, title: block.title, content: block.content, position: block.position, version: block.version },
         secret
       });
       snapshot = { ...snapshot, blocks: blocks.map((item) => item.id === updated.id ? updated : item) };
@@ -97,9 +115,12 @@
 
   async function copySelected(ids = selected) {
     if (!ids.length) return;
-    await copyText(mergeBlocks(blocks, ids));
-    notice = `已複製 ${ids.length} 個 Block`;
-    window.setTimeout(() => notice = '', 2200);
+    await run(async () => {
+      const result = await api('/portable-text', {
+        method: 'POST', body: { block_ids: ids }, secret
+      });
+      await copyText(result.text);
+    }, `已複製 ${ids.length} 個 Agent-ready 資產`);
   }
 
   async function dropBefore(targetId) {
@@ -191,7 +212,7 @@
     const root = `${window.location.origin}/api/v1`;
     const text = `# CrossPrompt AI 操作說明
 
-你可以透過 HTTP API 管理我的永久 Prompt Vault。除 callback 外，所有請求都使用：
+你可以透過 HTTP API 管理我的永久型別化資產 Vault。除 callback 外，所有請求都使用：
 Authorization: Bearer ${secret}
 Content-Type: application/json
 
@@ -200,13 +221,16 @@ Base URL: ${root}
 讀取完整 Vault：
 GET ${root}/vault
 
-新增 Block：
-POST ${root}/blocks?source=YOUR_AI_NAME
-{"title":"Block 標題","content":"Markdown 內容"}
+先讀取可用型別、預設模板與各型別的 Agent 使用方式：
+GET ${root}/artifact-types
 
-修改 Block（version 必須使用讀取到的目前值，否則會回傳 409）：
+新增型別化資產（block_type 必須使用型別目錄中的 key；省略時相容為 prompt）：
+POST ${root}/blocks?source=YOUR_AI_NAME
+{"block_type":"skill","title":"Skill 標題","content":"Markdown 內容"}
+
+修改資產（version 必須使用讀取到的目前值，否則會回傳 409）：
 PATCH ${root}/blocks/{block_id}?source=YOUR_AI_NAME
-{"title":"新標題","content":"新內容","position":0,"version":1}
+{"block_type":"skill","title":"新標題","content":"新內容","position":0,"version":1}
 
 刪除 Block：
 DELETE ${root}/blocks/{block_id}?source=YOUR_AI_NAME
@@ -214,6 +238,10 @@ DELETE ${root}/blocks/{block_id}?source=YOUR_AI_NAME
 
 完整排序：
 POST ${root}/blocks/reorder
+{"block_ids":["id-1","id-2"]}
+
+產生可直接交給 Agent、內含型別使用引導的文字包：
+POST ${root}/portable-text
 {"block_ids":["id-1","id-2"]}
 
 Bundle endpoints：GET/POST ${root}/bundles；PATCH/DELETE ${root}/bundles/{bundle_id}
@@ -286,10 +314,10 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
       <div class="vault-identity">
         <label for="vault-name">Vault</label>
         <div class="inline-edit"><input id="vault-name" bind:value={snapshot.vault.name} maxlength="100" /><button on:click={renameVault} disabled={busy}>儲存</button></div>
-        <p>{blocks.length}/100 Blocks · {bundles.length}/20 Bundles</p>
+        <p>{blocks.length}/100 Assets · {bundles.length}/20 Bundles</p>
       </div>
       <nav class="tabs" aria-label="Vault 功能">
-        <button class:active={activeTab === 'blocks'} on:click={() => changeTab('blocks')}><span>01</span>Blocks</button>
+        <button class:active={activeTab === 'blocks'} on:click={() => changeTab('blocks')}><span>01</span>Assets</button>
         <button class:active={activeTab === 'bundles'} on:click={() => changeTab('bundles')}><span>02</span>Bundles</button>
         <button class:active={activeTab === 'history'} on:click={() => changeTab('history')}><span>03</span>版本歷史</button>
         <button class:active={activeTab === 'notify'} on:click={() => changeTab('notify')}><span>04</span>Notify</button>
@@ -297,18 +325,35 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
       </nav>
       <div class="selection-box">
         <span>已選 {selected.length} 個</span>
-        <button class="primary compact" disabled={!selected.length} on:click={() => copySelected()}>合併複製</button>
+        <button class="primary compact" disabled={!selected.length || busy} on:click={() => copySelected()}>複製 Agent Pack</button>
       </div>
     </aside>
 
     <section class="workspace-main">
       {#if activeTab === 'blocks'}
-        <div class="page-heading"><div><p class="eyebrow">PORTABLE CONTENT</p><h1>Markdown Blocks</h1></div><p>拖曳調整順序；勾選後固定以 <code>## 標題</code> 與 <code>---</code> 合併。</p></div>
-        <form class="new-block" on:submit|preventDefault={createBlock}>
-          <input bind:value={newBlock.title} placeholder="新的 Block 標題" maxlength="100" required />
-          <textarea bind:value={newBlock.content} placeholder="輸入 Markdown 內容…" maxlength="65536" required></textarea>
-          <div class="form-footer"><span>{newBlock.content.length.toLocaleString()} / 65,536 bytes</span><button class="primary" disabled={busy}>新增 Block</button></div>
-        </form>
+        <div class="page-heading"><div><p class="eyebrow">TYPED PORTABLE ASSETS</p><h1>選一種資產開始</h1></div><p>每種型別都有預設模板與 Agent 使用規則；複製時會自動包成可直接理解的 Portable Agent Pack。</p></div>
+        <section class="type-catalog" aria-label="資產型別">
+          {#each artifactTypes as type}
+            <button type="button" class="type-card" class:active={newBlock?.block_type === type.key} on:click={() => startTypedBlock(type)}>
+              <span>{type.short_label}</span>
+              <strong>{type.label}</strong>
+              <small>{type.description}</small>
+            </button>
+          {/each}
+        </section>
+
+        {#if newBlock && selectedType}
+          <form class="new-block typed-compose" on:submit|preventDefault={createBlock}>
+            <div class="compose-heading">
+              <div><span class="type-pill">{selectedType.short_label}</span><strong>{selectedType.label}</strong></div>
+              <button type="button" class="quiet compact" on:click={() => newBlock = null}>取消</button>
+            </div>
+            <p class="agent-guidance"><strong>複製給 Agent 時：</strong>{selectedType.agent_instructions}</p>
+            <input bind:value={newBlock.title} placeholder="資產標題" maxlength="100" required />
+            <textarea bind:value={newBlock.content} placeholder="輸入 Markdown 內容…" maxlength="65536" required></textarea>
+            <div class="form-footer"><span>{newBlock.content.length.toLocaleString()} / 65,536 bytes</span><button class="primary" disabled={busy}>建立 {selectedType.short_label}</button></div>
+          </form>
+        {/if}
 
         <div class="block-list">
           {#each blocks as block (block.id)}
@@ -316,26 +361,32 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
               <div class="block-toolbar">
                 <span class="drag-handle" title="拖曳排序">⠿</span>
                 <label class="check"><input type="checkbox" checked={selected.includes(block.id)} on:change={() => toggleSelected(block.id)} /><span></span></label>
+                <select class="type-select" bind:value={block.block_type} aria-label={`${block.title} 型別`}>
+                  {#each artifactTypes as type}<option value={type.key}>{type.short_label}</option>{/each}
+                </select>
                 <input class="block-title" bind:value={block.title} maxlength="100" aria-label="Block 標題" />
                 <span class="version">v{block.version}</span>
                 <button class="quiet compact" on:click={() => copySelected([block.id])}>複製</button>
                 <button class="quiet compact" on:click={() => saveBlock(block)} disabled={busy}>儲存</button>
                 <button class="danger-link compact" on:click={() => removeBlock(block)}>刪除</button>
               </div>
+              {#if typeFor(block.block_type)}
+                <details class="type-guidance"><summary>{typeFor(block.block_type).label} · Agent 如何使用</summary><p>{typeFor(block.block_type).agent_instructions}</p></details>
+              {/if}
               <div class="editor-grid">
                 <textarea bind:value={block.content} maxlength="65536" aria-label={`${block.title} Markdown`}></textarea>
                 <div class="preview"><span class="preview-label">安全預覽</span><Markdown content={block.content} /></div>
               </div>
             </article>
           {:else}
-            <div class="empty-state"><h3>還沒有 Block</h3><p>先把最常用的 System Prompt 或工作偏好放進來。</p></div>
+            <div class="empty-state"><h3>還沒有可攜資產</h3><p>從上方選擇 Prompt、Skill、MCP、Schema 或其他型別，系統會先替你建立骨架。</p></div>
           {/each}
         </div>
       {:else if activeTab === 'bundles'}
-        <div class="page-heading"><div><p class="eyebrow">SAVED COMBINATIONS</p><h1>Bundles</h1></div><p>Bundle 保存一組有順序的 Block ID；複製時仍依目前 Block 排序輸出。</p></div>
+        <div class="page-heading"><div><p class="eyebrow">SAVED COMBINATIONS</p><h1>Bundles</h1></div><p>Bundle 保存有順序的資產組合；複製時會帶上總體引導與每個型別的使用方式。</p></div>
         <form class="bundle-create" on:submit|preventDefault={createBundle}>
           <input bind:value={bundleName} placeholder="Bundle 名稱" maxlength="100" required />
-          <span>{selected.length} 個已勾選 Block</span>
+          <span>{selected.length} 個已勾選資產</span>
           <button class="primary" disabled={!selected.length || busy}>儲存 Bundle</button>
         </form>
         <div class="bundle-grid">
@@ -343,8 +394,8 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
             <article class="bundle-card">
               <span class="eyebrow">BUNDLE · v{bundle.version}</span>
               <input bind:value={bundle.name} maxlength="100" aria-label="Bundle 名稱" />
-              <p>{bundle.block_ids.length} 個 Block</p>
-              <ol>{#each bundle.block_ids as id}<li>{blocks.find((block) => block.id === id)?.title || '已移除的 Block'}</li>{/each}</ol>
+              <p>{bundle.block_ids.length} 個資產</p>
+              <ol>{#each bundle.block_ids as id}<li><span class="inline-type">{typeFor(blocks.find((block) => block.id === id)?.block_type)?.short_label || 'Unknown'}</span>{blocks.find((block) => block.id === id)?.title || '已移除的資產'}</li>{/each}</ol>
               <div class="button-row">
                 <button class="primary compact" on:click={() => copySelected(bundle.block_ids)}>複製</button>
                 <button class="quiet compact" on:click={() => selected = [...bundle.block_ids]}>載入勾選</button>

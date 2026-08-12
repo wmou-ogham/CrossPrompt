@@ -51,16 +51,6 @@ export async function copyText(value) {
   field.remove();
 }
 
-/** @param {Array<{id: string, title: string, content: string}>} blocks @param {string[]} selectedIds */
-export function mergeBlocks(blocks, selectedIds) {
-  const byId = new Map(blocks.map((block) => [block.id, block]));
-  return selectedIds
-    .map((id) => byId.get(id))
-    .filter((block) => block !== undefined)
-    .map((block) => `## ${block.title}\n\n${block.content}`)
-    .join('\n\n---\n\n');
-}
-
 /** @param {string} filename @param {unknown} value */
 export function downloadJson(filename, value) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }));

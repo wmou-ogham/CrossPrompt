@@ -16,7 +16,7 @@
 
 - [x] Add the typed asset catalog and SQLite migration
 - [x] Extend the API, revisions, OpenAPI, and portable copy format for typed assets
-- [ ] Add type templates, guidance, editing, and admin visibility to the web interfaces
+- [x] Add type templates, guidance, editing, and admin visibility to the web interfaces
 - [x] Add automated coverage for typed templates and Agent-ready output
 - [ ] Rebuild and verify the deployed staging stack
 

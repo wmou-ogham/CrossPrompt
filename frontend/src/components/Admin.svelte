@@ -202,8 +202,8 @@
         {#if detail.vault.status === 'deleted'}<button class="primary" on:click={() => action(detail.vault.id, 'restore')}>Restore</button>{/if}
         <button class="danger" on:click={() => action(detail.vault.id, 'permanent')}>Permanent delete</button>
       </div>
-      <h3>完整 Blocks</h3>
-      {#each detail.blocks as block}<article class="content-inspection"><div><strong>{block.title}</strong><span>v{block.version} · position {block.position}</span></div><pre>{block.content}</pre></article>{:else}<p class="muted">沒有 Block</p>{/each}
+      <h3>完整型別化資產</h3>
+      {#each detail.blocks as block}<article class="content-inspection"><div><strong><span class="inline-type">{block.block_type || 'prompt'}</span>{block.title}</strong><span>v{block.version} · position {block.position}</span></div><pre>{block.content}</pre></article>{:else}<p class="muted">沒有資產</p>{/each}
       <h3>Bundles</h3>
       {#each detail.bundles as bundle}<article class="content-inspection"><strong>{bundle.name}</strong><pre>{JSON.stringify(bundle.block_ids, null, 2)}</pre></article>{:else}<p class="muted">沒有 Bundle</p>{/each}
       <h3>最近版本來源</h3>

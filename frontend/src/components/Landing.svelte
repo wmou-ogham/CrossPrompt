@@ -51,7 +51,7 @@
   }
 </script>
 
-<svelte:head><title>CrossPrompt — 你的 Prompt Homepage</title></svelte:head>
+<svelte:head><title>CrossPrompt — 你的 AI 資產 Homepage</title></svelte:head>
 
 <header class="site-header landing-header">
   <a class="brand" href="/" aria-label="CrossPrompt 首頁"><span class="brand-mark">C</span>CrossPrompt</a>
@@ -62,10 +62,10 @@
   <section class="hero shell">
     <div class="hero-copy">
       <p class="eyebrow">ONE LINK. EVERY AI.</p>
-      <h1>把你習慣的 Prompt，<br />帶到任何 AI。</h1>
-      <p class="hero-lead">一個永久的私人文字 Vault。沒有帳號、沒有平台綁定；複製整段文字，或讓 AI 直接透過 API 維護。</p>
+      <h1>把你習慣的 AI 工具，<br />帶到任何平臺。</h1>
+      <p class="hero-lead">不只是 Markdown 剪貼簿。用有結構的 Prompt、Template、Skill、MCP、Workflow 與 Schema 組成私人 Vault，再複製成 Agent 看得懂的單一文字包。</p>
       <div class="promise-row">
-        <span>Markdown Blocks</span><span>Bundles</span><span>AI-writable API</span><span>Completion Notify</span>
+        <span>12 Typed Assets</span><span>Agent-ready Bundles</span><span>AI-writable API</span><span>Completion Notify</span>
       </div>
     </div>
 
@@ -87,10 +87,10 @@
   </section>
 
   <section class="workflow shell">
-    <div class="section-intro"><p class="eyebrow">HOW IT TRAVELS</p><h2>文字就是最耐用的可攜格式。</h2></div>
+    <div class="section-intro"><p class="eyebrow">HOW IT TRAVELS</p><h2>有型別的文字，讓 Agent 知道該怎麼用。</h2></div>
     <div class="steps-grid">
-      <article><span>01</span><h3>存成 Blocks</h3><p>把 System Prompt、工作習慣、Skill 說明與常用上下文拆成 Markdown 區塊。</p></article>
-      <article><span>02</span><h3>組成 Bundles</h3><p>依任務勾選區塊，一鍵合併成固定格式，貼到任何能接收文字的 AI。</p></article>
+      <article><span>01</span><h3>選型別，取得骨架</h3><p>建立 Prompt Template、Skill、MCP Server、Agent Profile、Workflow、Schema 等 12 種資產時，自動帶入可編輯模板。</p></article>
+      <article><span>02</span><h3>組成 Agent Pack</h3><p>依任務勾選資產，一鍵產生總體說明、各型別使用方式與內容，貼到任何能接收文字的 AI。</p></article>
       <article><span>03</span><h3>交給 AI 維護</h3><p>複製內建 API 說明，AI 就能新增、修改、排序及刪除；做完還能通知你。</p></article>
     </div>
   </section>
@@ -106,4 +106,4 @@
   </section>
 </main>
 
-<footer class="site-footer shell"><span>CrossPrompt</span><span>Portable prompts, without platform lock-in.</span></footer>
+<footer class="site-footer shell"><span>CrossPrompt</span><span>Portable AI assets, without platform lock-in.</span></footer>

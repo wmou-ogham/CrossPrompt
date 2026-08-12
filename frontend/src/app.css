@@ -110,9 +110,22 @@ label { display: grid; gap: 7px; color: #3d4945; font-size: 12px; font-weight: 7
 .page-heading > p { color: var(--muted); max-width: 460px; font-size: 13px; line-height: 1.6; margin: 0; }
 .page-heading code { background: #e2e6dc; padding: 2px 5px; }
 
+.type-catalog { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin-bottom: 18px; }
+.type-card { min-height: 142px; padding: 16px; border: 1px solid var(--line); background: var(--paper); display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; text-align: left; gap: 8px; }
+.type-card:hover, .type-card.active { border-color: var(--green); background: #eef2e9; }
+.type-card > span { font: 800 9px/1 monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--green); }
+.type-card > strong { font-size: 14px; line-height: 1.25; }
+.type-card > small { color: var(--muted); font-size: 11px; font-weight: 500; line-height: 1.5; }
 .new-block { border: 1px solid var(--line); background: var(--paper); padding: 18px; display: grid; gap: 10px; margin-bottom: 25px; }
 .new-block > input { font-weight: 750; }
 .new-block textarea { min-height: 100px; }
+.typed-compose { border-top: 4px solid var(--green); padding: 22px; }
+.typed-compose textarea { min-height: 360px; font: 13px/1.65 "SFMono-Regular", Consolas, monospace; }
+.compose-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.compose-heading > div { display: flex; align-items: center; gap: 10px; }
+.type-pill, .inline-type { display: inline-flex; width: max-content; background: var(--navy); color: var(--lime); padding: 5px 7px; font: 750 9px/1 monospace; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.agent-guidance { margin: 2px 0 7px; padding: 11px 13px; border-left: 3px solid var(--green); background: #edf2e9; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.agent-guidance strong { color: var(--ink); }
 .form-footer { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 10px; }
 .block-list { display: grid; gap: 18px; }
 .block-editor { background: var(--paper); border: 1px solid var(--line); }
@@ -122,8 +135,12 @@ label { display: grid; gap: 7px; color: #3d4945; font-size: 12px; font-weight: 7
 .check input { position: absolute; opacity: 0; }
 .check span { width: 18px; height: 18px; border: 1px solid #9ba6a1; display: block; }
 .check input:checked + span { background: var(--green); box-shadow: inset 0 0 0 4px white; }
+.type-select { width: 108px; padding: 6px 24px 6px 8px; border-color: var(--line); background: #eef1e9; color: var(--green-dark); font: 750 10px/1 monospace; }
 .block-title { border: 0; background: transparent; box-shadow: none !important; padding: 6px; font-weight: 760; font-size: 15px; }
 .version { color: var(--muted); font: 10px monospace; white-space: nowrap; }
+.type-guidance { border-bottom: 1px solid var(--line); background: #f0f3ec; padding: 9px 15px; }
+.type-guidance summary { cursor: pointer; color: var(--green-dark); font-size: 11px; font-weight: 750; }
+.type-guidance p { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 10px 0 3px; }
 .editor-grid { display: grid; grid-template-columns: 1fr 1fr; min-height: 310px; }
 .editor-grid > textarea { border: 0; border-right: 1px solid var(--line); padding: 20px; resize: vertical; min-height: 310px; font: 13px/1.65 "SFMono-Regular", Consolas, monospace; box-shadow: none; }
 .preview { min-width: 0; padding: 20px; overflow: auto; background: #fff; }
@@ -145,6 +162,7 @@ label { display: grid; gap: 7px; color: #3d4945; font-size: 12px; font-weight: 7
 .bundle-card > input { font-size: 20px; font-weight: 750; padding-left: 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; }
 .bundle-card > p, .settings-grid p { color: var(--muted); font-size: 13px; line-height: 1.6; }
 .bundle-card ol { min-height: 70px; padding-left: 20px; font-size: 13px; line-height: 1.8; }
+.bundle-card li .inline-type { margin-right: 7px; padding: 3px 5px; font-size: 8px; }
 .settings-grid article.warning-card { border-color: var(--red); }
 .settings-grid h3 { margin-top: 0; }
 .history-list { display: grid; border-top: 1px solid var(--line); }
@@ -211,6 +229,7 @@ td small { color: var(--amber); margin-top: 5px; }
   .metric-grid { grid-template-columns: repeat(3, 1fr); }
   .metric-grid article:nth-child(3) { border-right: 0; }
   .metric-grid article:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+  .type-catalog { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 780px) {
@@ -232,10 +251,13 @@ td small { color: var(--amber); margin-top: 5px; }
   .selection-box { margin-top: 0; }
   .workspace-main { padding: 35px 0 80px; }
   .page-heading { display: grid; align-items: start; }
+  .type-catalog { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .type-card { min-height: 135px; padding: 13px; }
   .editor-grid { grid-template-columns: 1fr; }
   .editor-grid > textarea { border-right: 0; border-bottom: 1px solid var(--line); }
   .block-toolbar { flex-wrap: wrap; }
   .block-title { flex: 1 1 55%; }
+  .type-select { width: 94px; }
   .bundle-grid, .settings-grid { grid-template-columns: 1fr; }
   .bundle-create, .filters { grid-template-columns: 1fr; align-items: stretch; }
   .history-list article { align-items: flex-start; padding: 12px 0; display: grid; }
