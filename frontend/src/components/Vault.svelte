@@ -90,7 +90,9 @@
   }
 
   function toggleSelected(id) {
-    selected = selected.includes(id) ? selected.filter((value) => value !== id) : [...selected, id];
+    const ids = new Set(selected);
+    if (ids.has(id)) ids.delete(id); else ids.add(id);
+    selected = blocks.filter((block) => ids.has(block.id)).map((block) => block.id);
   }
 
   async function copySelected(ids = selected) {

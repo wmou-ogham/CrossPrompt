@@ -53,8 +53,10 @@ export async function copyText(value) {
 
 /** @param {Array<{id: string, title: string, content: string}>} blocks @param {string[]} selectedIds */
 export function mergeBlocks(blocks, selectedIds) {
-  return blocks
-    .filter((block) => selectedIds.includes(block.id))
+  const byId = new Map(blocks.map((block) => [block.id, block]));
+  return selectedIds
+    .map((id) => byId.get(id))
+    .filter((block) => block !== undefined)
     .map((block) => `## ${block.title}\n\n${block.content}`)
     .join('\n\n---\n\n');
 }
