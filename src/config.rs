@@ -31,6 +31,9 @@ impl Config {
         let production = app_env == "production";
         let database_url = value("CROSSPROMPT_DATABASE_URL", "sqlite:///data/crossprompt.db");
         let database_path = sqlite_path(&database_url)?;
+        let public_base_url = value("CROSSPROMPT_PUBLIC_BASE_URL", "http://localhost:8080")
+            .trim_end_matches('/')
+            .to_owned();
 
         let admin_username = env::var("CROSSPROMPT_ADMIN_USERNAME")
             .unwrap_or_else(|_| "admin".into());
@@ -40,6 +43,9 @@ impl Config {
             .unwrap_or_else(|_| "development-session-secret-change-me".into());
         let ip_hash_salt = env::var("CROSSPROMPT_IP_HASH_SALT")
             .unwrap_or_else(|_| "development-ip-salt-change-me".into());
+        let turnstile_secret_key = optional_value("CROSSPROMPT_TURNSTILE_SECRET_KEY");
+        let turnstile_site_key = optional_value("CROSSPROMPT_TURNSTILE_SITE_KEY");
+        let cookie_secure = bool_value("CROSSPROMPT_COOKIE_SECURE", production);
         let master_key = match env::var("CROSSPROMPT_MASTER_KEY") {
             Ok(raw) => decode_master_key(&raw)?,
             Err(_) if !production => {
@@ -56,14 +62,29 @@ impl Config {
                 "CROSSPROMPT_SESSION_SECRET",
                 "CROSSPROMPT_MASTER_KEY",
                 "CROSSPROMPT_IP_HASH_SALT",
+                "CROSSPROMPT_TURNSTILE_SITE_KEY",
+                "CROSSPROMPT_TURNSTILE_SECRET_KEY",
             ] {
-                if env::var(key).is_err() {
+                if env::var(key)
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+                    .is_none()
+                {
                     bail!("{key} is required in production");
                 }
             }
             if session_secret.len() < 32 || ip_hash_salt.len() < 24 {
                 bail!("production session secret and IP salt are too short");
             }
+            if !public_base_url.starts_with("https://") {
+                bail!("CROSSPROMPT_PUBLIC_BASE_URL must use https in production");
+            }
+            if !cookie_secure {
+                bail!("CROSSPROMPT_COOKIE_SECURE must be true in production");
+            }
+        }
+        if turnstile_secret_key.is_some() != turnstile_site_key.is_some() {
+            bail!("Turnstile site and secret keys must be configured together");
         }
         if admin_username.trim().is_empty() {
             bail!("CROSSPROMPT_ADMIN_USERNAME cannot be empty");
@@ -78,18 +99,16 @@ impl Config {
             database_url,
             database_path,
             frontend_dir: PathBuf::from(value("CROSSPROMPT_FRONTEND_DIR", "/app/static")),
-            public_base_url: value("CROSSPROMPT_PUBLIC_BASE_URL", "http://localhost:8080")
-                .trim_end_matches('/')
-                .to_owned(),
+            public_base_url,
             app_env,
             admin_username,
             admin_password_hash,
             session_secret,
             master_key,
             ip_hash_salt,
-            turnstile_secret_key: env::var("CROSSPROMPT_TURNSTILE_SECRET_KEY").ok(),
-            turnstile_site_key: env::var("CROSSPROMPT_TURNSTILE_SITE_KEY").ok(),
-            cookie_secure: bool_value("CROSSPROMPT_COOKIE_SECURE", production),
+            turnstile_secret_key,
+            turnstile_site_key,
+            cookie_secure,
             trust_proxy: bool_value("CROSSPROMPT_TRUST_PROXY", false),
         })
     }
@@ -104,6 +123,13 @@ fn bool_value(key: &str, default: bool) -> bool {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(default)
+}
+
+fn optional_value(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
 }
 
 fn sqlite_path(url: &str) -> Result<PathBuf> {

@@ -48,6 +48,8 @@ CrossPrompt 是一個無一般使用者帳號的私人 Prompt Homepage。使用�
 
 Production 模式缺少管理員帳號、Argon2id hash、Session secret、master key 或 IP hash salt 時會拒絕啟動。管理 Cookie 在 production 預設為 `Secure`、`HttpOnly`、`SameSite=Strict`，Session 有效 12 小時。
 
+Production 也會強制 `https://` public URL、Secure Cookie，以及成對且非空的 Turnstile site/secret keys。沒有正式網域、TLS 或 Turnstile keys 時請使用 `development` 或 `staging`，不要把該實例直接暴露到網際網路。
+
 ## 使用者資料規則
 
 - 有 Block、Bundle、通知設定，或曾真正使用過的 Vault 永不因閒置而自動過期。
