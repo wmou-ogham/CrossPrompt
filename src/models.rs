@@ -21,6 +21,7 @@ pub struct Vault {
 pub struct Block {
     pub id: String,
     pub vault_id: String,
+    #[serde(default = "default_block_type")]
     pub block_type: String,
     pub title: String,
     pub content: String,
@@ -28,6 +29,32 @@ pub struct Block {
     pub version: i64,
     pub created_at: String,
     pub updated_at: String,
+}
+
+fn default_block_type() -> String { "prompt".into() }
+
+#[cfg(test)]
+mod tests {
+    use super::Block;
+
+    #[test]
+    fn legacy_revision_blocks_default_to_prompt_type() {
+        let block: Block = serde_json::from_str(
+            r#"{
+                "id":"block-1",
+                "vault_id":"vault-1",
+                "title":"Legacy prompt",
+                "content":"Be concise.",
+                "position":0,
+                "version":1,
+                "created_at":"2026-01-01T00:00:00Z",
+                "updated_at":"2026-01-01T00:00:00Z"
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(block.block_type, "prompt");
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

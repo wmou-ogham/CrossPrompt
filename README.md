@@ -1,6 +1,27 @@
 # CrossPrompt
 
-CrossPrompt 是一個無一般使用者帳號的私人 Prompt Homepage。使用者取得一條高熵祕密連結後，可永久保存 Markdown Blocks、建立 Bundles、一鍵合併複製，或讓 AI 透過 HTTP API 完整維護內容。AI 完成工作後也能呼叫 callback，轉送到 Pushcut、ntfy 或通用 JSON webhook。
+CrossPrompt 是一個無一般使用者帳號的私人 AI 資產 Homepage。使用者取得一條高熵祕密連結後，可永久保存有正式型別的 Markdown 資產、建立 Bundles，並一鍵產生附帶 Agent 使用引導的 Portable Agent Pack。AI 也能透過 HTTP API 完整維護內容，完成工作後再呼叫 callback，轉送到 Pushcut、ntfy 或通用 JSON webhook。
+
+## 型別化可攜資產
+
+建立資產時，前端會載入該型別的預設標題與 Markdown 模板。資料庫將型別保存為 `block_type`；修改內容或還原 Revision 時都會保留型別。
+
+| 型別 key | 用途 |
+| --- | --- |
+| `prompt` | 可直接執行的自由 Prompt |
+| `prompt_template` | 含 `{{variable}}` 與必填說明的 Prompt Template |
+| `skill` | 觸發條件、流程、工具、品質檢查與例外處理 |
+| `mcp_server` | MCP transport、連線、能力、環境變數與安全界線 |
+| `agent_profile` | Agent 角色、目標、行為與回應風格 |
+| `workflow` | 多步驟流程、分支、完成條件與通知 |
+| `context_pack` | 事實、術語、假設、來源與資料時效 |
+| `preferences` | 個人長期溝通、工具與工作方式偏好 |
+| `tool_api` | Tool／API 的輸入輸出、副作用與錯誤契約 |
+| `schema` | JSON 等結構化輸出的欄位與限制 |
+| `evaluation_rubric` | 有證據的評分準則、權重與通過門檻 |
+| `safety_policy` | 可直接執行、需確認與禁止操作的界線 |
+
+`POST /api/v1/portable-text` 依指定順序輸出單一文字包。包首會提醒接收 Agent 不要把所有內容都當作立即執行的 Prompt；每一項也會附上型別名稱、專屬「如何使用」與原始內容。MCP 與 API 設定只代表描述存在，不會讓 Agent 假裝工具已經連線。
 
 ## 架構
 
@@ -74,12 +95,18 @@ Content-Type: application/json
 ```sh
 curl -H "Authorization: Bearer $VAULT_SECRET" http://localhost:8080/api/v1/vault
 
+curl http://localhost:8080/api/v1/artifact-types
+
 curl -X POST -H "Authorization: Bearer $VAULT_SECRET" -H 'Content-Type: application/json' \
   'http://localhost:8080/api/v1/blocks?source=Claude' \
-  --data '{"title":"System Prompt","content":"Answer in Traditional Chinese."}'
+  --data '{"block_type":"skill","title":"Research Skill","content":"# 何時使用\n\n需要查證資料時。"}'
+
+curl -X POST -H "Authorization: Bearer $VAULT_SECRET" -H 'Content-Type: application/json' \
+  http://localhost:8080/api/v1/portable-text \
+  --data '{"block_ids":["block-id-1","block-id-2"]}'
 ```
 
-Block 與 Bundle 更新／刪除必須帶目前 `version`；不同步會回傳 `409 Conflict`。一般 Vault API 每分鐘 120 次；callback 每分鐘 10 次、每日 100 次。
+為相容舊 client，建立 Block 時省略 `block_type` 會預設為 `prompt`。Block 與 Bundle 更新／刪除必須帶目前 `version`；不同步會回傳 `409 Conflict`。一般 Vault API 每分鐘 120 次；callback 每分鐘 10 次、每日 100 次。
 
 Callback payload：
 
