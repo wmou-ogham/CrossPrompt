@@ -5,6 +5,7 @@ use sqlx::FromRow;
 pub struct Vault {
     pub id: String,
     #[serde(skip_serializing)]
+    #[allow(dead_code)]
     pub secret_hash: Vec<u8>,
     pub name: String,
     pub status: String,
@@ -111,4 +112,3 @@ pub struct CallbackPayload {
     #[serde(default)]
     pub url: Option<String>,
 }
-

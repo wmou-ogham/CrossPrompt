@@ -1,6 +1,7 @@
 use std::{env, net::SocketAddr, path::PathBuf};
 
 use anyhow::{bail, Context, Result};
+use argon2::{password_hash::SaltString, Argon2, PasswordHash, PasswordHasher};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use sha2::{Digest, Sha256};
 
@@ -64,6 +65,11 @@ impl Config {
                 bail!("production session secret and IP salt are too short");
             }
         }
+        if admin_username.trim().is_empty() {
+            bail!("CROSSPROMPT_ADMIN_USERNAME cannot be empty");
+        }
+        PasswordHash::new(&admin_password_hash)
+            .map_err(|error| anyhow::anyhow!("invalid CROSSPROMPT_ADMIN_PASSWORD_HASH: {error}"))?;
 
         Ok(Self {
             bind_addr: value("CROSSPROMPT_BIND", "0.0.0.0:8080")
@@ -118,6 +124,22 @@ fn decode_master_key(raw: &str) -> Result<[u8; 32]> {
 
 fn development_password_hash() -> String {
     // Password: admin. Production refuses to use this implicit fallback.
-    "$argon2id$v=19$m=19456,t=2,p=1$ZGV2ZWxvcG1lbnQtc2FsdA$9hNSXuhJTgfAK1z7gCV1WJdT0cx46I7a5F+V0U7bUXM".into()
+    let salt = SaltString::encode_b64(b"crossprompt-dev").expect("valid static salt");
+    Argon2::default()
+        .hash_password(b"admin", &salt)
+        .expect("valid development password hash")
+        .to_string()
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use argon2::PasswordVerifier;
+
+    #[test]
+    fn development_admin_password_is_valid() {
+        let encoded = development_password_hash();
+        let hash = PasswordHash::new(&encoded).unwrap();
+        assert!(Argon2::default().verify_password(b"admin", &hash).is_ok());
+    }
+}

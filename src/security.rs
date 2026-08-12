@@ -10,6 +10,7 @@ use aes_gcm::{
 use anyhow::{bail, Context, Result};
 use axum::http::HeaderMap;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 use tokio::net::lookup_host;
 use url::{Host, Url};
@@ -24,6 +25,13 @@ pub fn new_secret() -> String {
 
 pub fn digest(value: &str) -> Vec<u8> {
     Sha256::digest(value.as_bytes()).to_vec()
+}
+
+pub fn keyed_digest(key: &str, value: &str) -> Vec<u8> {
+    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(key.as_bytes())
+        .expect("HMAC accepts keys of any size");
+    mac.update(value.as_bytes());
+    mac.finalize().into_bytes().to_vec()
 }
 
 pub fn salted_digest(salt: &str, value: &str) -> String {
@@ -183,5 +191,10 @@ mod tests {
         assert!(!String::from_utf8_lossy(&encrypted).contains("example.com"));
         assert_eq!(decrypt_config(&key, &encrypted).unwrap().url, config.url);
     }
-}
 
+    #[test]
+    fn keyed_digests_are_peppered() {
+        assert_eq!(keyed_digest("a", "token"), keyed_digest("a", "token"));
+        assert_ne!(keyed_digest("a", "token"), keyed_digest("b", "token"));
+    }
+}

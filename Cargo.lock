@@ -379,6 +379,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "dotenvy",
+ "hmac",
  "http-body-util",
  "rand 0.8.7",
  "reqwest",
