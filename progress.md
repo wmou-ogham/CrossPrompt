@@ -1,7 +1,7 @@
 # CrossPrompt implementation progress
 
 - [ ] Scaffold the Rust, Svelte, SQLite, and Docker project
-- [ ] Implement database migrations and secure application configuration
+- [x] Implement database migrations and secure application configuration
 - [ ] Implement Vault, Block, Bundle, Revision, and secret rotation APIs
 - [ ] Implement notification targets, callback forwarding, rate limits, and SSRF protection
 - [ ] Implement administrator authentication, dashboard, audit log, and moderation actions
