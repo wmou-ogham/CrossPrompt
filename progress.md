@@ -5,8 +5,8 @@
 - [x] Implement Vault, Block, Bundle, Revision, and secret rotation APIs
 - [x] Implement notification targets, callback forwarding, rate limits, and SSRF protection
 - [x] Implement administrator authentication, dashboard, audit log, and moderation actions
-- [ ] Implement the public landing page and Vault workspace
-- [ ] Implement the administrator interface
+- [x] Implement the public landing page and Vault workspace
+- [x] Implement the administrator interface
 - [ ] Add OpenAPI, health checks, cleanup jobs, deployment documentation, and examples
 - [ ] Add automated tests for core user, retention, security, and administration flows
 - [ ] Build and run the full Docker stack on the remote host

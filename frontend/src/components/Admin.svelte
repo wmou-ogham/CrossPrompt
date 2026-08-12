@@ -1,0 +1,213 @@
+<script>
+  import { onMount } from 'svelte';
+  import { ApiError, api } from '../lib/api.js';
+
+  let authenticated = false;
+  let login = { username: '', password: '' };
+  let csrf = sessionStorage.getItem('crossprompt_csrf') || '';
+  let overview = null;
+  let vaults = [];
+  let detail = null;
+  let audit = [];
+  let filters = { q: '', status: '', sort: 'updated_desc', page: 1 };
+  let view = 'vaults';
+  let busy = false;
+  let error = '';
+  let notice = '';
+
+  onMount(async () => {
+    if (!csrf) return;
+    try {
+      await api('/admin/session');
+      authenticated = true;
+      await refresh();
+    } catch {
+      sessionStorage.removeItem('crossprompt_csrf');
+      csrf = '';
+    }
+  });
+
+  async function signIn() {
+    await run(async () => {
+      const result = await api('/admin/session', { method: 'POST', body: login });
+      csrf = result.csrf_token;
+      sessionStorage.setItem('crossprompt_csrf', csrf);
+      authenticated = true;
+      login.password = '';
+      await refresh();
+    }, '已登入管理後台');
+  }
+
+  async function signOut() {
+    await run(async () => {
+      await api('/admin/session', { method: 'DELETE', csrf });
+      sessionStorage.removeItem('crossprompt_csrf');
+      csrf = '';
+      authenticated = false;
+      overview = null;
+    }, '已登出');
+  }
+
+  async function run(action, success = '') {
+    busy = true;
+    error = '';
+    notice = '';
+    try {
+      await action();
+      notice = success;
+      if (success) window.setTimeout(() => notice = '', 2200);
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 401) {
+        authenticated = false;
+        csrf = '';
+        sessionStorage.removeItem('crossprompt_csrf');
+      }
+      error = requestError.message;
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function refresh() {
+    const [summary] = await Promise.all([api('/admin/overview'), loadVaults()]);
+    overview = summary;
+  }
+
+  async function loadVaults() {
+    const params = new URLSearchParams({ page: String(filters.page), sort: filters.sort });
+    if (filters.q.trim()) params.set('q', filters.q.trim());
+    if (filters.status) params.set('status', filters.status);
+    const result = await api(`/admin/vaults?${params}`);
+    vaults = result.items;
+  }
+
+  async function applyFilters() {
+    filters.page = 1;
+    await run(loadVaults);
+  }
+
+  async function openVault(id) {
+    await run(async () => {
+      detail = await api(`/admin/vaults/${id}`);
+    });
+  }
+
+  async function showAudit() {
+    view = 'audit';
+    await run(async () => {
+      const result = await api('/admin/audit-log');
+      audit = result.items;
+    });
+  }
+
+  async function action(id, name) {
+    let body = { reason: null };
+    let method = 'POST';
+    if (name === 'suspend' || name === 'delete' || name === 'resume' || name === 'restore') {
+      const reason = prompt(name === 'suspend' || name === 'delete' ? '請填寫內部原因（可留空）' : '復原／恢復原因（可留空）');
+      if (reason === null) return;
+      body = { reason };
+    }
+    if (name === 'permanent') {
+      const confirmation = prompt(`這會立即且不可復原地清除所有資料。請輸入完整 Vault ID：\n${id}`);
+      if (confirmation === null) return;
+      const reason = prompt('永久刪除原因（可留空）');
+      if (reason === null) return;
+      body = { confirmation, reason };
+      method = 'DELETE';
+    }
+    await run(async () => {
+      await api(`/admin/vaults/${id}/${name}`, { method, body, csrf });
+      detail = null;
+      await refresh();
+    }, `管理動作 ${name} 已完成`);
+  }
+
+  function bytes(value) {
+    if (value < 1024) return `${value} B`;
+    if (value < 1048576) return `${(value / 1024).toFixed(1)} KiB`;
+    return `${(value / 1048576).toFixed(1)} MiB`;
+  }
+</script>
+
+<svelte:head><title>Admin — CrossPrompt</title></svelte:head>
+
+<header class="site-header admin-header">
+  <a class="brand" href="/"><span class="brand-mark">C</span>CrossPrompt <small>ADMIN</small></a>
+  {#if authenticated}<div class="header-actions"><button class:active={view === 'vaults'} class="quiet" on:click={() => view = 'vaults'}>Vaults</button><button class:active={view === 'audit'} class="quiet" on:click={showAudit}>Audit log</button><button class="quiet" on:click={signOut}>登出</button></div>{/if}
+</header>
+
+{#if error}<div class="floating-message error-banner" role="alert">{error}</div>{/if}
+{#if notice}<div class="floating-message success-banner">{notice}</div>{/if}
+
+{#if !authenticated}
+  <main class="login-page shell">
+    <form class="login-panel" on:submit|preventDefault={signIn}>
+      <p class="eyebrow">RESTRICTED OPERATIONS</p><h1>管理員登入</h1>
+      <p>單一管理員後台。Session 有效 12 小時，mutation 受 CSRF 保護。</p>
+      <label>帳號<input bind:value={login.username} autocomplete="username" required /></label>
+      <label>密碼<input type="password" bind:value={login.password} autocomplete="current-password" required /></label>
+      <button class="primary large" disabled={busy}>{busy ? '驗證中…' : '登入'}</button>
+    </form>
+  </main>
+{:else}
+  <main class="admin-main shell-wide">
+    {#if overview}
+      <section class="metric-grid">
+        <article><span>Vaults</span><strong>{overview.vaults.total}</strong><small>{overview.vaults.active} active · {overview.vaults.suspended} suspended</small></article>
+        <article><span>Content</span><strong>{overview.objects.blocks + overview.objects.bundles}</strong><small>{overview.objects.blocks} blocks · {overview.objects.bundles} bundles</small></article>
+        <article><span>Revisions</span><strong>{overview.objects.revisions}</strong><small>{bytes(overview.storage.revision_bytes)} logical</small></article>
+        <article><span>SQLite</span><strong>{bytes(overview.storage.database_file_bytes)}</strong><small>DB + WAL + SHM</small></article>
+        <article><span>Created / 30d</span><strong>{overview.vaults.created_30d}</strong><small>{overview.vaults.created_24h} in last 24h</small></article>
+        <article><span>Webhook / 30d</span><strong>{overview.webhooks_30d.success}</strong><small>{overview.webhooks_30d.failed} failed</small></article>
+      </section>
+    {/if}
+
+    {#if view === 'vaults'}
+      <section class="admin-section">
+        <div class="page-heading"><div><p class="eyebrow">OPERATIONS</p><h1>Vault 管理</h1></div><p>管理員能查看但不能修改使用者內容，也無法取得或復原 secret。</p></div>
+        <form class="filters" on:submit|preventDefault={applyFilters}>
+          <input bind:value={filters.q} placeholder="搜尋 Vault ID 或名稱" />
+          <select bind:value={filters.status}><option value="">全部狀態</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="deleted">Deleted</option><option value="empty">Never used</option></select>
+          <select bind:value={filters.sort}><option value="updated_desc">最近修改</option><option value="updated_asc">最早修改</option><option value="created_asc">最早建立</option><option value="size_desc">容量最大</option></select>
+          <button class="primary">查詢</button>
+        </form>
+        <div class="table-wrap"><table><thead><tr><th>Vault</th><th>狀態</th><th>Objects</th><th>容量</th><th>最後修改</th><th></th></tr></thead><tbody>
+          {#each vaults as vault}
+            <tr><td><strong>{vault.name}</strong><code>{vault.id}</code></td><td><span class="status-pill {vault.status}">{vault.status}</span>{#if !vault.ever_used}<small>never used</small>{/if}</td><td>{vault.block_count} / {vault.bundle_count} / {vault.revision_count}</td><td>{bytes(vault.content_bytes)}</td><td>{new Date(vault.updated_at).toLocaleString()}</td><td><button class="quiet compact" on:click={() => openVault(vault.id)}>查看</button></td></tr>
+          {:else}<tr><td colspan="6">沒有符合條件的 Vault</td></tr>{/each}
+        </tbody></table></div>
+        <div class="pager"><button class="quiet" disabled={filters.page <= 1} on:click={async () => { filters.page -= 1; await loadVaults(); }}>上一頁</button><span>第 {filters.page} 頁</span><button class="quiet" disabled={vaults.length < 50} on:click={async () => { filters.page += 1; await loadVaults(); }}>下一頁</button></div>
+      </section>
+    {:else}
+      <section class="admin-section">
+        <div class="page-heading"><div><p class="eyebrow">IMMUTABLE FROM UI</p><h1>管理稽核紀錄</h1></div><button class="quiet" on:click={showAudit}>重新整理</button></div>
+        <div class="table-wrap"><table><thead><tr><th>時間</th><th>操作</th><th>Vault ID</th><th>原因</th><th>管理員 IP hash</th></tr></thead><tbody>
+          {#each audit as item}<tr><td>{new Date(item.created_at).toLocaleString()}</td><td><span class="status-pill">{item.action}</span></td><td><code>{item.vault_id || '—'}</code></td><td>{item.reason || '—'}</td><td><code>{item.ip_hash.slice(0, 16)}…</code></td></tr>{/each}
+        </tbody></table></div>
+      </section>
+    {/if}
+  </main>
+{/if}
+
+{#if detail}
+  <div class="modal-backdrop" role="presentation" on:click={(event) => event.currentTarget === event.target && (detail = null)}>
+    <div class="admin-detail" role="dialog" aria-modal="true" aria-label="Vault 詳情" tabindex="-1">
+      <div class="detail-header"><div><span class="status-pill {detail.vault.status}">{detail.vault.status}</span><h2>{detail.vault.name}</h2><code>{detail.vault.id}</code></div><button class="quiet" on:click={() => detail = null}>關閉</button></div>
+      <dl class="detail-meta"><div><dt>建立</dt><dd>{new Date(detail.vault.created_at).toLocaleString()}</dd></div><div><dt>修改</dt><dd>{new Date(detail.vault.updated_at).toLocaleString()}</dd></div><div><dt>通知</dt><dd>{detail.notification_target?.masked_url || '未設定'}</dd></div><div><dt>Objects</dt><dd>{detail.blocks.length} / {detail.bundles.length} / {detail.revisions.length}</dd></div></dl>
+      <div class="admin-actions">
+        {#if detail.vault.status === 'active'}<button class="warning" on:click={() => action(detail.vault.id, 'suspend')}>Suspend</button>{/if}
+        {#if detail.vault.status === 'suspended'}<button class="primary" on:click={() => action(detail.vault.id, 'resume')}>Resume</button>{/if}
+        {#if detail.vault.status !== 'deleted'}<button class="danger" on:click={() => action(detail.vault.id, 'delete')}>Soft delete</button>{/if}
+        {#if detail.vault.status === 'deleted'}<button class="primary" on:click={() => action(detail.vault.id, 'restore')}>Restore</button>{/if}
+        <button class="danger" on:click={() => action(detail.vault.id, 'permanent')}>Permanent delete</button>
+      </div>
+      <h3>完整 Blocks</h3>
+      {#each detail.blocks as block}<article class="content-inspection"><div><strong>{block.title}</strong><span>v{block.version} · position {block.position}</span></div><pre>{block.content}</pre></article>{:else}<p class="muted">沒有 Block</p>{/each}
+      <h3>Bundles</h3>
+      {#each detail.bundles as bundle}<article class="content-inspection"><strong>{bundle.name}</strong><pre>{JSON.stringify(bundle.block_ids, null, 2)}</pre></article>{:else}<p class="muted">沒有 Bundle</p>{/each}
+      <h3>最近版本來源</h3>
+      <div class="history-list compact-list">{#each detail.revisions as revision}<article><div><strong>{revision.action} {revision.resource_type}</strong><code>{revision.resource_id || 'vault'}</code></div><span>{revision.source} · {new Date(revision.created_at).toLocaleString()}</span></article>{/each}</div>
+    </div>
+  </div>
+{/if}
