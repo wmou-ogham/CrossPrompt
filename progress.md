@@ -9,8 +9,8 @@
 - [x] Implement the administrator interface
 - [x] Add OpenAPI, health checks, cleanup jobs, deployment documentation, and examples
 - [x] Add automated tests for core user, retention, security, and administration flows
-- [ ] Build and run the full Docker stack on the remote host
-- [ ] Verify key workflows against the running service
+- [x] Build and run the full Docker stack on the remote host
+- [x] Verify key workflows against the running service
 
 ## Notes
 

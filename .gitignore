@@ -3,6 +3,7 @@
 /frontend/dist/
 /data/
 .env
+.admin-initial-password
 *.db
 *.db-shm
 *.db-wal
