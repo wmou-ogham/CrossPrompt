@@ -182,8 +182,9 @@ mod tests {
     use axum::{
         body::Body,
         extract::connect_info::ConnectInfo,
-        http::{Request, StatusCode},
+        http::{header, Request, StatusCode},
     };
+    use argon2::{password_hash::{PasswordHasher, SaltString}, Argon2};
     use http_body_util::BodyExt;
     use serde_json::{json, Value};
     use tower::ServiceExt;
@@ -195,23 +196,7 @@ mod tests {
             "/tmp/crossprompt-api-test-{}.db",
             Uuid::new_v4()
         ));
-        let config = config::Config {
-            bind_addr: "127.0.0.1:0".parse().unwrap(),
-            database_url: format!("sqlite://{}", database_path.display()),
-            database_path: database_path.clone(),
-            frontend_dir: "/tmp/crossprompt-empty-static".into(),
-            public_base_url: "http://crossprompt.test".into(),
-            app_env: "test".into(),
-            admin_username: "admin".into(),
-            admin_password_hash: "$argon2id$v=19$m=19456,t=2,p=1$Y3Jvc3Nwcm9tcHQtZGV2$xLQdyhm+6q3K0zRrcRQgcYLDbhq73JC6EHmvoOrqEaM".into(),
-            session_secret: "test-session-secret-that-is-long-enough".into(),
-            master_key: [7; 32],
-            ip_hash_salt: "test-ip-hash-salt-long-enough".into(),
-            turnstile_secret_key: None,
-            turnstile_site_key: None,
-            cookie_secure: false,
-            trust_proxy: false,
-        };
+        let config = test_config(database_path.clone(), test_password_hash("unused-password"));
         let pool = db::connect(&config).await.unwrap();
         let app = router(AppState::new(config, pool.clone()).unwrap());
         let peer = ConnectInfo("203.0.113.20:43100".parse::<SocketAddr>().unwrap());
@@ -280,6 +265,106 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn administrator_moderation_is_csrf_protected_and_audited() {
+        let database_path = std::path::PathBuf::from(format!(
+            "/tmp/crossprompt-admin-test-{}.db",
+            Uuid::new_v4()
+        ));
+        let password = "correct horse battery staple";
+        let config = test_config(database_path.clone(), test_password_hash(password));
+        let pool = db::connect(&config).await.unwrap();
+        let app = router(AppState::new(config, pool.clone()).unwrap());
+        let user_peer = ConnectInfo("203.0.113.20:43100".parse::<SocketAddr>().unwrap());
+        let admin_peer = ConnectInfo("198.51.100.14:52100".parse::<SocketAddr>().unwrap());
+
+        let response = app.clone().oneshot(json_request(
+            "POST", "/api/v1/vaults", json!({"name":"Moderated Vault"}), None, user_peer,
+        )).await.unwrap();
+        let created = response_json(response).await;
+        let secret = created["secret"].as_str().unwrap().to_owned();
+        let vault_id = created["vault"]["id"].as_str().unwrap().to_owned();
+
+        let login_response = app.clone().oneshot(session_request(
+            "POST", "/api/v1/admin/session",
+            json!({"username":"admin","password":password}), None, None, admin_peer,
+        )).await.unwrap();
+        assert_eq!(login_response.status(), StatusCode::OK);
+        let cookie = login_response.headers().get(header::SET_COOKIE).unwrap().to_str().unwrap()
+            .split(';').next().unwrap().to_owned();
+        let login_data = response_json(login_response).await;
+        let csrf = login_data["csrf_token"].as_str().unwrap().to_owned();
+
+        let no_csrf = app.clone().oneshot(session_request(
+            "POST", &format!("/api/v1/admin/vaults/{vault_id}/suspend"),
+            json!({"reason":"abuse review"}), Some(&cookie), None, admin_peer,
+        )).await.unwrap();
+        assert_eq!(no_csrf.status(), StatusCode::FORBIDDEN);
+
+        let detail = app.clone().oneshot(session_request(
+            "GET", &format!("/api/v1/admin/vaults/{vault_id}"), json!({}),
+            Some(&cookie), None, admin_peer,
+        )).await.unwrap();
+        assert_eq!(detail.status(), StatusCode::OK);
+
+        let suspended = app.clone().oneshot(session_request(
+            "POST", &format!("/api/v1/admin/vaults/{vault_id}/suspend"),
+            json!({"reason":"abuse review"}), Some(&cookie), Some(&csrf), admin_peer,
+        )).await.unwrap();
+        assert_eq!(suspended.status(), StatusCode::NO_CONTENT);
+        let locked = app.clone().oneshot(json_request(
+            "GET", "/api/v1/vault", json!({}), Some(&secret), user_peer,
+        )).await.unwrap();
+        assert_eq!(locked.status(), StatusCode::LOCKED);
+
+        let resumed = app.clone().oneshot(session_request(
+            "POST", &format!("/api/v1/admin/vaults/{vault_id}/resume"),
+            json!({"reason":"review complete"}), Some(&cookie), Some(&csrf), admin_peer,
+        )).await.unwrap();
+        assert_eq!(resumed.status(), StatusCode::NO_CONTENT);
+        let active = app.clone().oneshot(json_request(
+            "GET", "/api/v1/vault", json!({}), Some(&secret), user_peer,
+        )).await.unwrap();
+        assert_eq!(active.status(), StatusCode::OK);
+
+        let deleted = app.clone().oneshot(session_request(
+            "POST", &format!("/api/v1/admin/vaults/{vault_id}/delete"),
+            json!({"reason":"policy"}), Some(&cookie), Some(&csrf), admin_peer,
+        )).await.unwrap();
+        assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+        let user_restore = app.clone().oneshot(json_request(
+            "POST", "/api/v1/vault/restore", json!({}), Some(&secret), user_peer,
+        )).await.unwrap();
+        assert_eq!(user_restore.status(), StatusCode::FORBIDDEN);
+
+        let wrong_confirmation = app.clone().oneshot(session_request(
+            "DELETE", &format!("/api/v1/admin/vaults/{vault_id}/permanent"),
+            json!({"confirmation":"wrong-id","reason":"test"}), Some(&cookie), Some(&csrf), admin_peer,
+        )).await.unwrap();
+        assert_eq!(wrong_confirmation.status(), StatusCode::BAD_REQUEST);
+
+        let restored = app.clone().oneshot(session_request(
+            "POST", &format!("/api/v1/admin/vaults/{vault_id}/restore"),
+            json!({"reason":"appeal"}), Some(&cookie), Some(&csrf), admin_peer,
+        )).await.unwrap();
+        assert_eq!(restored.status(), StatusCode::NO_CONTENT);
+
+        let audit_response = app.oneshot(session_request(
+            "GET", "/api/v1/admin/audit-log", json!({}), Some(&cookie), None, admin_peer,
+        )).await.unwrap();
+        let audit = response_json(audit_response).await;
+        let actions = audit["items"].as_array().unwrap().iter()
+            .filter_map(|item| item["action"].as_str()).collect::<Vec<_>>();
+        assert!(actions.contains(&"view_content"));
+        assert!(actions.contains(&"suspend"));
+        assert!(actions.contains(&"resume"));
+        assert!(actions.contains(&"soft_delete"));
+        assert!(actions.contains(&"restore"));
+
+        pool.close().await;
+        remove_test_database(&database_path);
+    }
+
     fn json_request(
         method: &str,
         uri: &str,
@@ -299,8 +384,58 @@ mod tests {
         request
     }
 
+    fn session_request(
+        method: &str,
+        uri: &str,
+        body: Value,
+        cookie: Option<&str>,
+        csrf: Option<&str>,
+        peer: ConnectInfo<SocketAddr>,
+    ) -> Request<Body> {
+        let mut builder = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json");
+        if let Some(cookie) = cookie { builder = builder.header(header::COOKIE, cookie); }
+        if let Some(csrf) = csrf { builder = builder.header("x-csrf-token", csrf); }
+        let mut request = builder.body(Body::from(body.to_string())).unwrap();
+        request.extensions_mut().insert(peer);
+        request
+    }
+
     async fn response_json(response: axum::response::Response) -> Value {
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         serde_json::from_slice(&bytes).unwrap()
+    }
+
+    fn test_password_hash(password: &str) -> String {
+        let salt = SaltString::encode_b64(b"crossprompt-test").unwrap();
+        Argon2::default().hash_password(password.as_bytes(), &salt).unwrap().to_string()
+    }
+
+    fn test_config(database_path: std::path::PathBuf, admin_password_hash: String) -> config::Config {
+        config::Config {
+            bind_addr: "127.0.0.1:0".parse().unwrap(),
+            database_url: format!("sqlite://{}", database_path.display()),
+            database_path,
+            frontend_dir: "/tmp/crossprompt-empty-static".into(),
+            public_base_url: "http://crossprompt.test".into(),
+            app_env: "test".into(),
+            admin_username: "admin".into(),
+            admin_password_hash,
+            session_secret: "test-session-secret-that-is-long-enough".into(),
+            master_key: [7; 32],
+            ip_hash_salt: "test-ip-hash-salt-long-enough".into(),
+            turnstile_secret_key: None,
+            turnstile_site_key: None,
+            cookie_secure: false,
+            trust_proxy: false,
+        }
+    }
+
+    fn remove_test_database(path: &std::path::Path) {
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+        }
     }
 }

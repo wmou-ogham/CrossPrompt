@@ -8,7 +8,7 @@
 - [x] Implement the public landing page and Vault workspace
 - [x] Implement the administrator interface
 - [x] Add OpenAPI, health checks, cleanup jobs, deployment documentation, and examples
-- [ ] Add automated tests for core user, retention, security, and administration flows
+- [x] Add automated tests for core user, retention, security, and administration flows
 - [ ] Build and run the full Docker stack on the remote host
 - [ ] Verify key workflows against the running service
 
