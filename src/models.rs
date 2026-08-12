@@ -21,6 +21,7 @@ pub struct Vault {
 pub struct Block {
     pub id: String,
     pub vault_id: String,
+    pub block_type: String,
     pub title: String,
     pub content: String,
     pub position: i64,

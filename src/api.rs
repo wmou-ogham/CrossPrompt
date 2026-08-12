@@ -11,6 +11,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::{
+    artifact_types,
     auth::{user_vault, user_vault_allow_deleted},
     db,
     error::{AppError, AppResult},
@@ -138,31 +139,86 @@ pub async fn list_blocks(State(state): State<AppState>, headers: HeaderMap) -> A
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CreateBlockInput { pub title: String, pub content: String, pub position: Option<i64> }
+pub struct PortableTextInput { pub block_ids: Vec<String> }
+
+pub async fn portable_text(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(input): Json<PortableTextInput>,
+) -> AppResult<Json<Value>> {
+    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    if input.block_ids.is_empty() {
+        return Err(AppError::bad("block_ids must contain at least one block"));
+    }
+    let mut unique = input.block_ids.clone();
+    unique.sort();
+    unique.dedup();
+    if unique.len() != input.block_ids.len() {
+        return Err(AppError::bad("block_ids cannot contain duplicates"));
+    }
+
+    let available = sqlx::query_as::<_, Block>(
+        "SELECT * FROM blocks WHERE vault_id = ? ORDER BY position, created_at",
+    )
+    .bind(&vault.id)
+    .fetch_all(&state.pool)
+    .await?;
+    let ordered = input
+        .block_ids
+        .iter()
+        .map(|id| available.iter().find(|block| &block.id == id).cloned())
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| AppError::bad("block_ids includes an unknown block"))?;
+
+    Ok(Json(json!({
+        "text": artifact_types::render_portable_pack(&ordered),
+        "block_count": ordered.len(),
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateBlockInput {
+    #[serde(default = "default_block_type")]
+    pub block_type: String,
+    pub title: String,
+    pub content: String,
+    pub position: Option<i64>,
+}
+
+fn default_block_type() -> String { "prompt".into() }
 
 pub async fn create_block(State(state): State<AppState>, headers: HeaderMap, Query(source): Query<SourceQuery>, Json(input): Json<CreateBlockInput>) -> AppResult<(StatusCode, Json<Block>)> {
     let vault = user_vault(&state.pool, &headers, &state.limits).await?;
     validate_block(&input.title, &input.content)?;
+    validate_block_type(&input.block_type)?;
     ensure_block_capacity(&state, &vault.id, input.content.len() as i64, true).await?;
     let position = input.position.unwrap_or(sqlx::query_scalar::<_, i64>("SELECT COALESCE(MAX(position), -1) + 1 FROM blocks WHERE vault_id = ?").bind(&vault.id).fetch_one(&state.pool).await?);
-    let block = Block { id: Uuid::new_v4().to_string(), vault_id: vault.id.clone(), title: input.title.trim().into(), content: input.content, position, version: 1, created_at: Utc::now().to_rfc3339(), updated_at: Utc::now().to_rfc3339() };
-    sqlx::query("INSERT INTO blocks (id, vault_id, title, content, position, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)")
-        .bind(&block.id).bind(&block.vault_id).bind(&block.title).bind(&block.content).bind(block.position).bind(&block.created_at).bind(&block.updated_at).execute(&state.pool).await?;
+    let block = Block { id: Uuid::new_v4().to_string(), vault_id: vault.id.clone(), block_type: input.block_type, title: input.title.trim().into(), content: input.content, position, version: 1, created_at: Utc::now().to_rfc3339(), updated_at: Utc::now().to_rfc3339() };
+    sqlx::query("INSERT INTO blocks (id, vault_id, block_type, title, content, position, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)")
+        .bind(&block.id).bind(&block.vault_id).bind(&block.block_type).bind(&block.title).bind(&block.content).bind(block.position).bind(&block.created_at).bind(&block.updated_at).execute(&state.pool).await?;
     db::revision(&state.pool, &vault.id, "block", Some(&block.id), "create", Option::<&Block>::None, Some(&block), &clean_source(&source.source)).await?;
     after_content_change(&state, &vault.id).await?;
     Ok((StatusCode::CREATED, Json(block)))
 }
 
 #[derive(Debug, Deserialize)]
-pub struct UpdateBlockInput { pub title: String, pub content: String, pub position: Option<i64>, pub version: i64 }
+pub struct UpdateBlockInput {
+    pub block_type: Option<String>,
+    pub title: String,
+    pub content: String,
+    pub position: Option<i64>,
+    pub version: i64,
+}
 
 pub async fn update_block(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>, Query(source): Query<SourceQuery>, Json(input): Json<UpdateBlockInput>) -> AppResult<Json<Block>> {
     let vault = user_vault(&state.pool, &headers, &state.limits).await?;
     validate_block(&input.title, &input.content)?;
     let before = block_for(&state, &vault.id, &id).await?;
+    let block_type = input.block_type.as_deref().unwrap_or(&before.block_type);
+    validate_block_type(block_type)?;
     ensure_block_capacity(&state, &vault.id, input.content.len() as i64 - before.content.len() as i64, false).await?;
-    let result = sqlx::query("UPDATE blocks SET title = ?, content = ?, position = COALESCE(?, position), version = version + 1, updated_at = ? WHERE id = ? AND vault_id = ? AND version = ?")
-        .bind(input.title.trim()).bind(&input.content).bind(input.position).bind(Utc::now().to_rfc3339()).bind(&id).bind(&vault.id).bind(input.version).execute(&state.pool).await?;
+    let result = sqlx::query("UPDATE blocks SET block_type = ?, title = ?, content = ?, position = COALESCE(?, position), version = version + 1, updated_at = ? WHERE id = ? AND vault_id = ? AND version = ?")
+        .bind(block_type).bind(input.title.trim()).bind(&input.content).bind(input.position).bind(Utc::now().to_rfc3339()).bind(&id).bind(&vault.id).bind(input.version).execute(&state.pool).await?;
     if result.rows_affected() == 0 { return Err(AppError::Conflict); }
     let after = block_for(&state, &vault.id, &id).await?;
     db::revision(&state.pool, &vault.id, "block", Some(&id), "update", Some(&before), Some(&after), &clean_source(&source.source)).await?;
@@ -343,6 +399,10 @@ pub async fn config_public(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
+pub async fn artifact_types() -> Json<&'static [artifact_types::ArtifactType]> {
+    Json(artifact_types::TYPES)
+}
+
 async fn verify_turnstile(state: &AppState, token: Option<&str>, remote_ip: String) -> AppResult<()> {
     let Some(secret) = state.config.turnstile_secret_key.as_deref() else { return Ok(()); };
     let token = token.filter(|v| !v.is_empty()).ok_or_else(|| AppError::bad("Turnstile verification is required"))?;
@@ -364,6 +424,12 @@ fn validate_block(title: &str, content: &str) -> AppResult<()> {
     clean_name(title)?;
     if content.len() > 65_536 { return Err(AppError::bad("block content exceeds 64 KiB")); }
     Ok(())
+}
+
+fn validate_block_type(block_type: &str) -> AppResult<()> {
+    artifact_types::find(block_type)
+        .map(|_| ())
+        .ok_or_else(|| AppError::bad("unknown block_type; use GET /api/v1/artifact-types"))
 }
 
 async fn ensure_block_capacity(state: &AppState, vault_id: &str, delta: i64, is_new: bool) -> AppResult<()> {
@@ -413,8 +479,9 @@ async fn restore_block_revision(state: &AppState, vault_id: &str, revision: &Rev
     match before {
         Some(mut block) => {
             block.vault_id = vault_id.into(); block.version = current.as_ref().map(|b| b.version + 1).unwrap_or(block.version + 1); block.updated_at = Utc::now().to_rfc3339();
-            sqlx::query("INSERT INTO blocks (id, vault_id, title, content, position, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET title = excluded.title, content = excluded.content, position = excluded.position, version = excluded.version, updated_at = excluded.updated_at")
-                .bind(&block.id).bind(vault_id).bind(&block.title).bind(&block.content).bind(block.position).bind(block.version).bind(&block.created_at).bind(&block.updated_at).execute(&state.pool).await?;
+            validate_block_type(&block.block_type)?;
+            sqlx::query("INSERT INTO blocks (id, vault_id, block_type, title, content, position, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET block_type = excluded.block_type, title = excluded.title, content = excluded.content, position = excluded.position, version = excluded.version, updated_at = excluded.updated_at")
+                .bind(&block.id).bind(vault_id).bind(&block.block_type).bind(&block.title).bind(&block.content).bind(block.position).bind(block.version).bind(&block.created_at).bind(&block.updated_at).execute(&state.pool).await?;
             db::revision(&state.pool, vault_id, "block", Some(&block.id), "restore", current.as_ref(), Some(&block), "restore").await?;
         }
         None => if let Some(current) = current { sqlx::query("DELETE FROM blocks WHERE id = ? AND vault_id = ?").bind(&current.id).bind(vault_id).execute(&state.pool).await?; db::revision(&state.pool, vault_id, "block", Some(&current.id), "restore", Some(&current), Option::<&Block>::None, "restore").await?; },

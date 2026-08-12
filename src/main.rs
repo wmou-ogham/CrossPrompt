@@ -1,5 +1,6 @@
 mod admin;
 mod api;
+mod artifact_types;
 mod auth;
 mod cleanup;
 mod config;
@@ -59,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
 fn router(state: AppState) -> Router {
     let public_api = Router::new()
         .route("/config", get(api::config_public))
+        .route("/artifact-types", get(api::artifact_types))
         .route("/vaults", post(api::create_vault))
         .route(
             "/vault",
@@ -70,6 +72,7 @@ fn router(state: AppState) -> Router {
         .route("/vault/rotate-secret", post(api::rotate_secret))
         .route("/blocks", get(api::list_blocks).post(api::create_block))
         .route("/blocks/reorder", post(api::reorder_blocks))
+        .route("/portable-text", post(api::portable_text))
         .route(
             "/blocks/{id}",
             patch(api::update_block).delete(api::delete_block),
@@ -203,6 +206,24 @@ mod tests {
 
         let response = app
             .clone()
+            .oneshot(json_request(
+                "GET",
+                "/api/v1/artifact-types",
+                json!({}),
+                None,
+                peer,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let types = response_json(response).await;
+        assert_eq!(types.as_array().unwrap().len(), 12);
+        assert!(types.as_array().unwrap().iter().any(|item| {
+            item["key"] == "skill" && item["template"].as_str().unwrap().contains("執行流程")
+        }));
+
+        let response = app
+            .clone()
             .oneshot(json_request("POST", "/api/v1/vaults", json!({"name":"Portable prompts"}), None, peer))
             .await
             .unwrap();
@@ -223,7 +244,42 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
         let block = response_json(response).await;
-        let block_id = block["id"].as_str().unwrap();
+        assert_eq!(block["block_type"], "prompt");
+        let block_id = block["id"].as_str().unwrap().to_owned();
+
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/api/v1/blocks?source=integration-test",
+                json!({"block_type":"skill","title":"Research skill","content":"# Workflow\n\nVerify sources."}),
+                Some(&secret),
+                peer,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let skill = response_json(response).await;
+        assert_eq!(skill["block_type"], "skill");
+        let skill_id = skill["id"].as_str().unwrap().to_owned();
+
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/api/v1/portable-text",
+                json!({"block_ids":[skill_id, block_id]}),
+                Some(&secret),
+                peer,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let portable = response_json(response).await;
+        let text = portable["text"].as_str().unwrap();
+        assert!(text.contains("給接收 Agent 的使用說明"));
+        assert!(text.contains("Skill / 專業技能 (`skill`)"));
+        assert!(text.find("Research skill").unwrap() < text.find("System prompt").unwrap());
 
         let response = app
             .clone()

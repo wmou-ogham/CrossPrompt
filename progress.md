@@ -12,6 +12,14 @@
 - [x] Build and run the full Docker stack on the remote host
 - [x] Verify key workflows against the running service
 
+## Typed portable assets
+
+- [x] Add the typed asset catalog and SQLite migration
+- [x] Extend the API, revisions, OpenAPI, and portable copy format for typed assets
+- [ ] Add type templates, guidance, editing, and admin visibility to the web interfaces
+- [x] Add automated coverage for typed templates and Agent-ready output
+- [ ] Rebuild and verify the deployed staging stack
+
 ## Notes
 
 - Project host: `moriss@10.121.180.185`

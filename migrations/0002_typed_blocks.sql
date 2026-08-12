@@ -1,0 +1,3 @@
+ALTER TABLE blocks
+ADD COLUMN block_type TEXT NOT NULL DEFAULT 'prompt';
+
