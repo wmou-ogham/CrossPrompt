@@ -299,7 +299,7 @@ pub async fn get_notification_target(State(state): State<AppState>, headers: Hea
 pub async fn put_notification_target(State(state): State<AppState>, headers: HeaderMap, Json(input): Json<NotificationTargetInput>) -> AppResult<Json<Value>> {
     let vault = user_vault(&state.pool, &headers, &state.limits).await?;
     let config = NotificationConfig { url: input.url, headers: input.headers };
-    notifications::validate_target(&input.kind, &config).await.map_err(AppError::Internal)?;
+    notifications::validate_target(&input.kind, &config).await.map_err(|error| AppError::bad(error.to_string()))?;
     let encrypted = encrypt_config(&state.config.master_key, &config).map_err(AppError::Internal)?;
     let now = Utc::now().to_rfc3339();
     sqlx::query("INSERT INTO notification_targets (vault_id, kind, encrypted_config, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(vault_id) DO UPDATE SET kind = excluded.kind, encrypted_config = excluded.encrypted_config, updated_at = excluded.updated_at")
@@ -318,7 +318,7 @@ pub async fn test_notification_target(State(state): State<AppState>, headers: He
     let vault = user_vault(&state.pool, &headers, &state.limits).await?;
     let (stored, config) = notifications::load_target(&state, &vault.id).await.map_err(AppError::Internal)?.ok_or_else(|| AppError::bad("notification target is not configured"))?;
     let payload = CallbackPayload { status: "completed".into(), title: "CrossPrompt test".into(), message: "Your notification target is connected.".into(), source: Some("CrossPrompt".into()), url: Some(format!("{}/#/v", state.config.public_base_url)) };
-    let status = notifications::send(&state, &vault.id, &stored, &config, &payload).await.map_err(AppError::Internal)?;
+    let status = notifications::send(&state, &vault.id, &stored, &config, &payload).await.map_err(|_| AppError::Upstream)?;
     Ok(Json(json!({ "delivered": true, "status_code": status.as_u16() })))
 }
 
@@ -331,7 +331,7 @@ pub async fn callback(State(state): State<AppState>, Path(secret): Path<String>,
     if !state.limits.check(format!("callback-minute:{}", vault.id), 10, Duration::from_secs(60))
         || !state.limits.check(format!("callback-day:{}", vault.id), 100, Duration::from_secs(86_400)) { return Err(AppError::RateLimited); }
     let (stored, config) = notifications::load_target(&state, &vault.id).await.map_err(AppError::Internal)?.ok_or_else(|| AppError::bad("notification target is not configured"))?;
-    let status = notifications::send(&state, &vault.id, &stored, &config, &payload).await.map_err(AppError::Internal)?;
+    let status = notifications::send(&state, &vault.id, &stored, &config, &payload).await.map_err(|_| AppError::Upstream)?;
     Ok(Json(json!({ "delivered": true, "status_code": status.as_u16() })))
 }
 

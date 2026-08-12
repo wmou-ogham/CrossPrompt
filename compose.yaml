@@ -1,0 +1,26 @@
+services:
+  crossprompt:
+    build:
+      context: .
+      target: runtime
+    image: crossprompt:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${CROSSPROMPT_PORT:-8080}:8080"
+    volumes:
+      - crossprompt_data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/readyz"]
+      interval: 30s
+      timeout: 4s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  crossprompt_data:

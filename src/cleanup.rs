@@ -29,7 +29,7 @@ async fn run(state: &AppState) -> anyhow::Result<()> {
     sqlx::query("DELETE FROM admin_sessions WHERE expires_at < ?").bind(sessions_now).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM creation_limits WHERE bucket < ?").bind(creation_cutoff).execute(&mut *tx).await?;
     tx.commit().await?;
+    sqlx::query("PRAGMA wal_checkpoint(PASSIVE)").execute(&state.pool).await?;
     if empty + deleted > 0 { tracing::info!(empty, deleted, "expired data cleaned"); }
     Ok(())
 }
-

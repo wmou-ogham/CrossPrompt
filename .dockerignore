@@ -1,0 +1,12 @@
+.git
+.env
+.DS_Store
+target
+data
+frontend/node_modules
+frontend/dist
+*.db
+*.db-shm
+*.db-wal
+sudo.log
+progress.md

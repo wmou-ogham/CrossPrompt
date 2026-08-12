@@ -23,6 +23,8 @@ pub enum AppError {
     Conflict,
     #[error("rate limit exceeded")]
     RateLimited,
+    #[error("notification delivery failed")]
+    Upstream,
     #[error(transparent)]
     Sql(#[from] sqlx::Error),
     #[error(transparent)]
@@ -46,6 +48,7 @@ impl IntoResponse for AppError {
             Self::Gone => (StatusCode::GONE, "vault_deleted", self.to_string()),
             Self::Conflict => (StatusCode::CONFLICT, "version_conflict", self.to_string()),
             Self::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "rate_limited", self.to_string()),
+            Self::Upstream => (StatusCode::BAD_GATEWAY, "notification_failed", self.to_string()),
             Self::Sql(error) => {
                 tracing::error!(error = %error, "database error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal_error", "internal server error".into())
@@ -60,4 +63,3 @@ impl IntoResponse for AppError {
 }
 
 pub type AppResult<T> = Result<T, AppError>;
-
