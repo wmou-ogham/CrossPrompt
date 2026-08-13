@@ -509,6 +509,7 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
 
 <svelte:head><title>{snapshot?.vault?.name || 'Vault'} — CrossPrompt</title></svelte:head>
 
+{#key activeLocale}
 <header class="site-header workspace-header">
   <a class="brand" href="/"><span class="brand-mark">C</span>CrossPrompt</a>
   <div class="header-actions">
@@ -678,3 +679,4 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
     </section>
   </main>
 {/if}
+{/key}

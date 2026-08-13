@@ -142,6 +142,7 @@
 
 <svelte:head><title>Admin — CrossPrompt</title></svelte:head>
 
+{#key activeLocale}
 <header class="site-header admin-header">
   <a class="brand" href="/"><span class="brand-mark">C</span>CrossPrompt <small>ADMIN</small></a>
   <div class="header-actions"><LanguageSwitcher />{#if authenticated}<button class:active={view === 'vaults'} class="quiet" on:click={() => view = 'vaults'}>Vaults</button><button class:active={view === 'audit'} class="quiet" on:click={showAudit}>{t('auditLog')}</button><button class="quiet" on:click={signOut}>{t('signOut')}</button>{/if}</div>
@@ -221,3 +222,4 @@
     </div>
   </div>
 {/if}
+{/key}

@@ -113,6 +113,7 @@
 
 <svelte:head><title>CrossPrompt — {t('typedHeading')}</title></svelte:head>
 
+{#key activeLocale}
 <header class="site-header landing-header">
   <a class="brand" href="/" aria-label="CrossPrompt 首頁"><span class="brand-mark">C</span>CrossPrompt</a>
   <div class="header-actions"><LanguageSwitcher /><a class="text-link" href="/admin">{t('admin')}</a></div>
@@ -191,3 +192,4 @@
 </main>
 
 <footer class="site-footer shell"><span>CrossPrompt</span><span>{t('footer')}</span></footer>
+{/key}
