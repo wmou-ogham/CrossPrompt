@@ -27,7 +27,7 @@
 - [x] Allow Vault APIs to authenticate by secret link or Email session
 - [x] Add Email login, binding, unbinding, and logout interfaces
 - [x] Add automated tests and operational documentation
-- [ ] Rebuild and verify the deployed staging stack
+- [x] Rebuild and verify the deployed staging stack
 
 ## Notes
 
