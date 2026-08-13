@@ -1,5 +1,7 @@
 # CrossPrompt
 
+Languages: [繁體中文](README.md) · [English](README.en.md) · [Español](README.es.md) · [Français](README.fr.md)
+
 CrossPrompt 是一個無一般使用者帳號的私人 AI 資產 Homepage。使用者取得一條高熵祕密連結後，可永久保存有正式型別的 Markdown 資產、建立 Bundles，並一鍵產生附帶 Agent 使用引導的 Portable Agent Pack。AI 也能透過 HTTP API 完整維護內容，完成工作後再呼叫 callback，轉送到 Pushcut、ntfy 或通用 JSON webhook。
 
 Vault 支援兩種瀏覽器存取方式：原本的高熵管理連結，以及寄到已驗證 Email 的六位數一次性登入碼。Email 是 Vault 的選用綁定，不會取代或顯示 Vault secret。

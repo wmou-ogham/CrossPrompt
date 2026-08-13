@@ -53,6 +53,14 @@
 - [x] Add a GitHub Action that runs only for opened, synchronized, or reopened PRs
 - [x] Push the signed commits to the requested GitHub repository
 
+## Internationalization
+
+- [x] Add a persisted locale store and language switcher for 繁中、English、Español、Français
+- [x] Translate Landing, Vault, Email OTP, Notify, and Admin workspace controls
+- [x] Add README language index plus English, Spanish, and French versions
+- [x] Rebuild and verify the multilingual frontend
+- [x] Push the signed i18n commits
+
 ## Notes
 
 - Project host: `moriss@10.121.180.185`
