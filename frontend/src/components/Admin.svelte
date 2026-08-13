@@ -194,7 +194,7 @@
   <div class="modal-backdrop" role="presentation" on:click={(event) => event.currentTarget === event.target && (detail = null)}>
     <div class="admin-detail" role="dialog" aria-modal="true" aria-label="Vault 詳情" tabindex="-1">
       <div class="detail-header"><div><span class="status-pill {detail.vault.status}">{detail.vault.status}</span><h2>{detail.vault.name}</h2><code>{detail.vault.id}</code></div><button class="quiet" on:click={() => detail = null}>關閉</button></div>
-      <dl class="detail-meta"><div><dt>建立</dt><dd>{new Date(detail.vault.created_at).toLocaleString()}</dd></div><div><dt>修改</dt><dd>{new Date(detail.vault.updated_at).toLocaleString()}</dd></div><div><dt>通知</dt><dd>{detail.notification_target?.masked_url || '未設定'}</dd></div><div><dt>Objects</dt><dd>{detail.blocks.length} / {detail.bundles.length} / {detail.revisions.length}</dd></div></dl>
+      <dl class="detail-meta"><div><dt>建立</dt><dd>{new Date(detail.vault.created_at).toLocaleString()}</dd></div><div><dt>修改</dt><dd>{new Date(detail.vault.updated_at).toLocaleString()}</dd></div><div><dt>Email</dt><dd>{detail.vault.email || '未綁定'}</dd></div><div><dt>通知</dt><dd>{detail.notification_target?.masked_url || '未設定'}</dd></div><div><dt>Objects</dt><dd>{detail.blocks.length} / {detail.bundles.length} / {detail.revisions.length}</dd></div></dl>
       <div class="admin-actions">
         {#if detail.vault.status === 'active'}<button class="warning" on:click={() => action(detail.vault.id, 'suspend')}>Suspend</button>{/if}
         {#if detail.vault.status === 'suspended'}<button class="primary" on:click={() => action(detail.vault.id, 'resume')}>Resume</button>{/if}

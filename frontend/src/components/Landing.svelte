@@ -2,8 +2,14 @@
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
 
-  let config = { turnstile_required: false, turnstile_site_key: null };
+  let config = { turnstile_required: false, turnstile_site_key: null, email_login_enabled: false };
+  let mode = 'create';
   let name = 'My CrossPrompt';
+  let vaultAccess = '';
+  let email = '';
+  let code = '';
+  let emailStep = 'request';
+  let notice = '';
   let turnstileToken = '';
   let busy = false;
   let error = '';
@@ -49,6 +55,50 @@
       busy = false;
     }
   }
+
+  function openVault() {
+    error = '';
+    const value = vaultAccess.trim();
+    const match = value.match(/#\/v\/([^/?#]+)/);
+    const secret = match ? decodeURIComponent(match[1]) : value;
+    if (!secret || secret.length < 32) {
+      error = '請貼上完整 Vault 管理連結或 secret。';
+      return;
+    }
+    window.location.hash = `/v/${encodeURIComponent(secret)}`;
+  }
+
+  async function requestEmailCode() {
+    busy = true;
+    error = '';
+    notice = '';
+    try {
+      const result = await api('/email/login/request-code', {
+        method: 'POST', body: { email }
+      });
+      notice = result.message;
+      emailStep = 'verify';
+    } catch (requestError) {
+      error = requestError.message;
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function verifyEmailCode() {
+    busy = true;
+    error = '';
+    try {
+      await api('/email/login/verify', {
+        method: 'POST', body: { email, code }
+      });
+      window.location.hash = '/email-vault';
+    } catch (requestError) {
+      error = requestError.message;
+    } finally {
+      busy = false;
+    }
+  }
 </script>
 
 <svelte:head><title>CrossPrompt — 你的 AI 資產 Homepage</title></svelte:head>
@@ -69,21 +119,45 @@
       </div>
     </div>
 
-    <form class="create-panel" on:submit|preventDefault={createVault}>
-      <div>
-        <span class="step-label">建立你的永久 Vault</span>
-        <h2>不用註冊，只要保存連結。</h2>
+    <div class="create-panel access-panel">
+      <div class="access-tabs" role="tablist" aria-label="CrossPrompt 存取方式">
+        <button type="button" class:active={mode === 'create'} on:click={() => mode = 'create'}>建立</button>
+        <button type="button" class:active={mode === 'vault'} on:click={() => mode = 'vault'}>Vault 連結</button>
+        <button type="button" class:active={mode === 'email'} on:click={() => mode = 'email'}>Email 驗證碼</button>
       </div>
-      <label>Vault 名稱
-        <input bind:value={name} maxlength="100" required autocomplete="off" />
-      </label>
-      {#if config.turnstile_required}<div bind:this={turnstileElement} class="turnstile"></div>{/if}
-      {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
-      <button class="primary large" disabled={busy || (config.turnstile_required && !turnstileToken)}>
-        {busy ? '建立中…' : '建立私人 Vault →'}
-      </button>
-      <p class="fine-print">建立後會產生唯一高熵祕密連結。遺失後無法復原，請立即收藏。</p>
-    </form>
+
+      {#if mode === 'create'}
+        <form class="access-form" on:submit|preventDefault={createVault}>
+          <div><span class="step-label">建立你的永久 Vault</span><h2>不用註冊，只要保存連結。</h2></div>
+          <label>Vault 名稱<input bind:value={name} maxlength="100" required autocomplete="off" /></label>
+          {#if config.turnstile_required}<div bind:this={turnstileElement} class="turnstile"></div>{/if}
+          {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
+          <button class="primary large" disabled={busy || (config.turnstile_required && !turnstileToken)}>{busy ? '建立中…' : '建立私人 Vault →'}</button>
+          <p class="fine-print">建立後會產生唯一高熵祕密連結。你可以進入 Vault 後再綁定已驗證的 Email。</p>
+        </form>
+      {:else if mode === 'vault'}
+        <form class="access-form" on:submit|preventDefault={openVault}>
+          <div><span class="step-label">方式一 · VAULT</span><h2>使用目前的管理連結。</h2></div>
+          <label>Vault 管理連結或 secret<input bind:value={vaultAccess} autocomplete="off" placeholder="https://…/#/v/…" required /></label>
+          {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
+          <button class="primary large">開啟 Vault →</button>
+          <p class="fine-print">Secret 只留在 URL fragment，不會送進一般 HTTP access log。請把它當成密碼保管。</p>
+        </form>
+      {:else}
+        <form class="access-form" on:submit|preventDefault={emailStep === 'request' ? requestEmailCode : verifyEmailCode}>
+          <div><span class="step-label">方式二 · EMAIL OTP</span><h2>{emailStep === 'request' ? '寄一組登入驗證碼。' : '輸入六位數驗證碼。'}</h2></div>
+          <label>Email<input type="email" bind:value={email} maxlength="254" autocomplete="email" required disabled={emailStep === 'verify'} /></label>
+          {#if emailStep === 'verify'}
+            <label>六位數驗證碼<input class="otp-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" bind:value={code} autocomplete="one-time-code" required /></label>
+          {/if}
+          {#if notice}<p class="access-notice" role="status">{notice}</p>{/if}
+          {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
+          <button class="primary large" disabled={busy || !config.email_login_enabled}>{busy ? '處理中…' : emailStep === 'request' ? '寄送驗證碼 →' : '驗證並登入 →'}</button>
+          {#if emailStep === 'verify'}<button type="button" class="panel-link" on:click={() => { emailStep = 'request'; code = ''; notice = ''; }}>更換 Email 或重新寄送</button>{/if}
+          <p class="fine-print">{config.email_login_enabled ? '驗證碼 10 分鐘內有效；成功後此瀏覽器保持登入 30 天。系統不會透露未綁定的 Email。' : '站台管理員尚未設定 SMTP，因此 Email 登入目前不可用。'}</p>
+        </form>
+      {/if}
+    </div>
   </section>
 
   <section class="workflow shell">

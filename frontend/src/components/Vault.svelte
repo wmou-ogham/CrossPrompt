@@ -4,9 +4,11 @@
   import { ApiError, api, copyText, downloadJson } from '../lib/api.js';
 
   export let secret;
+  export let emailSession = false;
 
   let snapshot = null;
   let artifactTypes = [];
+  let siteConfig = { email_login_enabled: false };
   let revisions = [];
   let selected = [];
   let activeTab = 'blocks';
@@ -19,6 +21,7 @@
   let bundleName = '';
   let dragId = '';
   let target = { kind: 'ntfy', url: '', headers: '{}' };
+  let emailBinding = { email: '', code: '', step: 'request' };
 
   $: blocks = snapshot?.blocks || [];
   $: bundles = snapshot?.bundles || [];
@@ -29,12 +32,15 @@
   async function load() {
     error = '';
     try {
-      const [nextSnapshot, types] = await Promise.all([
+      const [nextSnapshot, types, nextConfig] = await Promise.all([
         api('/vault', { secret }),
-        api('/artifact-types')
+        api('/artifact-types'),
+        api('/config')
       ]);
       snapshot = nextSnapshot;
       artifactTypes = types;
+      siteConfig = nextConfig;
+      if (!emailBinding.email && snapshot.vault.email) emailBinding.email = snapshot.vault.email;
       deleted = false;
       locked = false;
       if (activeTab === 'history') await loadRevisions();
@@ -209,6 +215,7 @@
   }
 
   async function copyAiGuide() {
+    if (!secret) return;
     const root = `${window.location.origin}/api/v1`;
     const text = `# CrossPrompt AI 操作說明
 
@@ -281,6 +288,46 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
       await load();
     }, 'Vault 已復原');
   }
+
+  async function requestBindCode() {
+    await run(async () => {
+      await api('/vault/email/request-code', {
+        method: 'POST', body: { email: emailBinding.email }, secret
+      });
+      emailBinding = { ...emailBinding, code: '', step: 'verify' };
+    }, 'Email 驗證碼已寄出');
+  }
+
+  async function verifyBindCode() {
+    const previousEmail = snapshot.vault.email;
+    await run(async () => {
+      await api('/vault/email/verify', {
+        method: 'POST', body: { email: emailBinding.email, code: emailBinding.code }, secret
+      });
+      if (emailSession && previousEmail && previousEmail !== emailBinding.email.trim().toLowerCase()) {
+        window.location.replace('/');
+        return;
+      }
+      emailBinding = { ...emailBinding, code: '', step: 'request' };
+      await load();
+    }, 'Email 已驗證並綁定');
+  }
+
+  async function unbindEmail() {
+    if (!secret || !confirm('解除 Email 後，所有 Email 登入工作階段會立即失效。確定繼續？')) return;
+    await run(async () => {
+      await api('/vault/email', { method: 'DELETE', secret });
+      emailBinding = { email: '', code: '', step: 'request' };
+      await load();
+    }, 'Email 綁定已解除');
+  }
+
+  async function logoutEmail() {
+    await run(async () => {
+      await api('/email/session', { method: 'DELETE' });
+      window.location.replace('/');
+    }, '已登出');
+  }
 </script>
 
 <svelte:head><title>{snapshot?.vault?.name || 'Vault'} — CrossPrompt</title></svelte:head>
@@ -288,8 +335,9 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
 <header class="site-header workspace-header">
   <a class="brand" href="/"><span class="brand-mark">C</span>CrossPrompt</a>
   <div class="header-actions">
-    <button class="quiet" on:click={copyAiGuide}>複製 AI 使用說明</button>
+    {#if secret}<button class="quiet" on:click={copyAiGuide}>複製 AI 使用說明</button>{/if}
     {#if snapshot}<button class="quiet" on:click={() => downloadJson(`crossprompt-${snapshot.vault.id}.json`, snapshot)}>匯出 JSON</button>{/if}
+    {#if emailSession}<button class="quiet" on:click={logoutEmail}>登出 Email</button>{/if}
   </div>
 </header>
 
@@ -300,7 +348,7 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
   <main class="state-page shell">
     <p class="eyebrow">SOFT DELETED</p><h1>這個 Vault 已刪除。</h1>
     <p>若是你自行刪除，可在七天內使用原連結復原。管理員刪除的 Vault 無法由使用者復原。</p>
-    <div class="button-row"><button class="primary" on:click={restoreVault} disabled={busy}>復原 Vault</button><a class="button quiet" href="/">回首頁</a></div>
+    <div class="button-row">{#if secret}<button class="primary" on:click={restoreVault} disabled={busy}>復原 Vault</button>{/if}<a class="button quiet" href="/">回首頁</a></div>
   </main>
 {:else if locked}
   <main class="state-page shell">
@@ -425,10 +473,23 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
       {:else if activeTab === 'settings'}
         <div class="page-heading"><div><p class="eyebrow">VAULT CONTROL</p><h1>設定與可攜性</h1></div></div>
         <div class="settings-grid">
-          <article><h3>AI 操作說明</h3><p>包含 Base URL、Bearer secret、CRUD、版本與 callback 範例。請只貼給你信任的 AI 工作階段。</p><button class="primary" on:click={copyAiGuide}>複製完整說明</button></article>
+          <article class="email-access-card">
+            <span class="eyebrow">EMAIL ACCESS</span><h3>綁定驗證 Email</h3>
+            {#if snapshot.vault.email}<p>目前已綁定 <strong>{snapshot.vault.email}</strong>。可用一次性驗證碼登入這個 Vault。</p>{:else}<p>驗證信箱所有權後，即可用 Email 收取一次性登入碼。</p>{/if}
+            {#if siteConfig.email_login_enabled}
+              <label>Email<input type="email" bind:value={emailBinding.email} maxlength="254" required disabled={emailBinding.step === 'verify'} /></label>
+              {#if emailBinding.step === 'verify'}
+                <label>六位數驗證碼<input class="otp-input" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" bind:value={emailBinding.code} autocomplete="one-time-code" /></label>
+                <div class="button-row"><button class="primary" disabled={busy || emailBinding.code.length !== 6} on:click={verifyBindCode}>驗證並綁定</button><button class="quiet" on:click={() => emailBinding = { ...emailBinding, step: 'request', code: '' }}>重新輸入</button></div>
+              {:else}
+                <div class="button-row"><button class="primary" disabled={busy || !emailBinding.email} on:click={requestBindCode}>{snapshot.vault.email ? '驗證／更換 Email' : '寄送綁定驗證碼'}</button>{#if snapshot.vault.email && secret}<button class="danger-link" on:click={unbindEmail}>解除綁定</button>{/if}</div>
+              {/if}
+            {:else}<p class="fine-print">管理員尚未設定 SMTP，Email 綁定與登入目前不可用。</p>{/if}
+          </article>
+          {#if secret}<article><h3>AI 操作說明</h3><p>包含 Base URL、Bearer secret、CRUD、版本與 callback 範例。請只貼給你信任的 AI 工作階段。</p><button class="primary" on:click={copyAiGuide}>複製完整說明</button></article>{/if}
           <article><h3>完整匯出</h3><p>下載目前 Vault snapshot，包含 Blocks、Bundles 與遮罩後的通知 metadata；不含原始通知 credential。</p><button class="quiet" on:click={() => downloadJson(`crossprompt-${snapshot.vault.id}.json`, snapshot)}>下載 JSON</button></article>
           <article class="warning-card"><h3>輪替 Secret</h3><p>立即使舊管理連結、Bearer API 與 callback URL 全部失效。內容不受影響。</p><button class="danger" on:click={rotateSecret}>輪替 Secret</button></article>
-          <article class="warning-card"><h3>刪除 Vault</h3><p>軟刪除後保留七天；這段期間可使用目前連結復原，之後永久清除。</p><button class="danger" on:click={deleteVault}>刪除 Vault</button></article>
+          {#if secret}<article class="warning-card"><h3>刪除 Vault</h3><p>軟刪除後保留七天；這段期間可使用目前連結復原，之後永久清除。</p><button class="danger" on:click={deleteVault}>刪除 Vault</button></article>{/if}
         </div>
       {/if}
     </section>

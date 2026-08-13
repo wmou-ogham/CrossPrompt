@@ -4,13 +4,14 @@
   import Vault from './components/Vault.svelte';
   import Admin from './components/Admin.svelte';
 
-  let route = { admin: false, secret: '' };
+  let route = { admin: false, secret: '', emailSession: false };
 
   function readRoute() {
     const match = window.location.hash.match(/^#\/v\/([^/]+)$/);
     route = {
       admin: window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/'),
-      secret: match ? decodeURIComponent(match[1]) : ''
+      secret: match ? decodeURIComponent(match[1]) : '',
+      emailSession: window.location.hash === '#/email-vault'
     };
   }
 
@@ -25,6 +26,8 @@
   <Admin />
 {:else if route.secret}
   <Vault secret={route.secret} />
+{:else if route.emailSession}
+  <Vault secret="" emailSession={true} />
 {:else}
   <Landing />
 {/if}
