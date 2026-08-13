@@ -513,7 +513,7 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
       <div class="vault-identity">
         <label for="vault-name">Vault</label>
         <div class="inline-edit"><input id="vault-name" bind:value={snapshot.vault.name} maxlength="100" /><button on:click={renameVault} disabled={busy}>儲存</button></div>
-        <p>{blocks.length}/100 Assets · {bundles.length}/20 Bundles</p>
+        <p>{blocks.length}/1000 Assets · {bundles.length}/200 Bundles</p>
       </div>
       <nav class="tabs" aria-label="Vault 功能">
         <button class:active={activeTab === 'blocks'} on:click={() => changeTab('blocks')}><span>01</span>Assets</button>

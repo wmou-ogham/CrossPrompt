@@ -21,6 +21,10 @@ use crate::{
     state::AppState,
 };
 
+const DAILY_VAULT_CREATION_LIMIT: i64 = 100;
+const MAX_BLOCKS_PER_VAULT: i64 = 1_000;
+const MAX_BUNDLES_PER_VAULT: i64 = 200;
+
 #[derive(Debug, Deserialize)]
 pub struct CreateVaultInput {
     #[serde(default)]
@@ -46,7 +50,7 @@ pub async fn create_vault(
         .fetch_optional(&mut *tx)
         .await?
         .unwrap_or(0);
-    if count >= 5 {
+    if count >= DAILY_VAULT_CREATION_LIMIT {
         return Err(AppError::RateLimited);
     }
     sqlx::query("INSERT INTO creation_limits (ip_hash, bucket, count) VALUES (?, ?, 1) ON CONFLICT(ip_hash, bucket) DO UPDATE SET count = count + 1")
@@ -286,7 +290,7 @@ pub struct CreateBundleInput { pub name: String, pub block_ids: Vec<String> }
 pub async fn create_bundle(State(state): State<AppState>, headers: HeaderMap, Query(source): Query<SourceQuery>, Json(input): Json<CreateBundleInput>) -> AppResult<(StatusCode, Json<Bundle>)> {
     let vault = user_vault(&state, &headers).await?;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bundles WHERE vault_id = ?").bind(&vault.id).fetch_one(&state.pool).await?;
-    if count >= 20 { return Err(AppError::bad("vault has reached the 20 bundle limit")); }
+    if count >= MAX_BUNDLES_PER_VAULT { return Err(AppError::bad("vault has reached the 200 bundle limit")); }
     validate_bundle(&state, &vault.id, &input.name, &input.block_ids).await?;
     let now = Utc::now().to_rfc3339();
     let bundle = Bundle { id: Uuid::new_v4().to_string(), vault_id: vault.id.clone(), name: input.name.trim().into(), block_ids: input.block_ids, version: 1, created_at: now.clone(), updated_at: now };
@@ -440,7 +444,7 @@ fn validate_block_type(block_type: &str) -> AppResult<()> {
 async fn ensure_block_capacity(state: &AppState, vault_id: &str, delta: i64, is_new: bool) -> AppResult<()> {
     let (count, bytes): (i64, i64) = sqlx::query_as("SELECT COUNT(*), COALESCE(SUM(LENGTH(CAST(content AS BLOB))), 0) FROM blocks WHERE vault_id = ?")
         .bind(vault_id).fetch_one(&state.pool).await?;
-    if is_new && count >= 100 { return Err(AppError::bad("vault has reached the 100 block limit")); }
+    if is_new && count >= MAX_BLOCKS_PER_VAULT { return Err(AppError::bad("vault has reached the 1000 block limit")); }
     if bytes + delta > 1_048_576 { return Err(AppError::bad("vault content exceeds 1 MiB")); }
     Ok(())
 }

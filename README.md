@@ -100,6 +100,8 @@ CROSSPROMPT_SMTP_FROM=CrossPrompt <no-reply@example.com>
 
 ## 使用者資料規則
 
+- 每個 IP 每日最多建立 100 個 Vault。
+- 每個 Vault 最多 1,000 個 Block、200 個 Bundle；內容總量仍限制為 1 MiB，單一 Block 仍限制為 64 KiB。
 - 有 Block、Bundle、通知設定，或曾真正使用過的 Vault 永不因閒置而自動過期。
 - 建立後 30 天仍從未建立 Block、沒有 Bundle、沒有通知設定，且未停用／刪除的空白 Vault 會永久清除。
 - 使用者或管理員 soft delete 後保留七天，再永久清除。
