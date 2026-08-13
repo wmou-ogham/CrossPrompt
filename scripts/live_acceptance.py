@@ -60,7 +60,10 @@ def main():
     _, artifact_types, _ = client.request("GET", "/api/v1/artifact-types")
     assert len(artifact_types) == 12
     skill_type = next(item for item in artifact_types if item["key"] == "skill")
+    mcp_type = next(item for item in artifact_types if item["key"] == "mcp_server")
     assert "執行流程" in skill_type["template"]
+    assert "Skill 目錄" in skill_type["agent_instructions"]
+    assert "MCP／MCP Server 設定" in mcp_type["agent_instructions"]
 
     _, block, _ = client.request(
         "POST", "/api/v1/blocks?source=live-acceptance",
@@ -74,7 +77,6 @@ def main():
     assert "給接收 Agent 的使用說明" in portable["text"]
     assert "Skill / 專業技能 (`skill`)" in portable["text"]
     assert "安裝或寫入目前 Agent 平台的 Skill 目錄" in portable["text"]
-    assert "MCP／MCP Server 設定" in portable["text"]
     client.request(
         "POST", "/api/v1/bundles?source=live-acceptance",
         {"name": "Default", "block_ids": [block["id"]]}, bearer=secret, expected=(201,)
