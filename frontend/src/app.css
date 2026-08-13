@@ -112,6 +112,8 @@ label { display: grid; gap: 7px; color: #3d4945; font-size: 12px; font-weight: 7
 .tabs button span { font: 650 10px monospace; }
 .tabs button:hover, .tabs button.active { color: var(--green); background: #e6e9df; }
 .selection-box { margin-top: auto; border: 1px solid var(--line); padding: 13px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; background: var(--paper); }
+.selection-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.raw-copy { color: var(--green); }
 .workspace-main { min-width: 0; padding: 48px 0 100px 48px; }
 .page-heading { display: flex; align-items: end; justify-content: space-between; gap: 30px; margin-bottom: 30px; }
 .page-heading h1 { margin: 0; font: 500 clamp(36px, 4vw, 55px)/1 Georgia, serif; letter-spacing: -.04em; }
@@ -259,7 +261,7 @@ td small { color: var(--amber); margin-top: 5px; }
   .workspace-sidebar { position: relative; top: 0; height: auto; border: 0; border-bottom: 1px solid var(--line); padding: 20px 0; }
   .tabs { grid-template-columns: repeat(5, minmax(max-content, 1fr)); overflow-x: auto; }
   .tabs button { display: grid; gap: 3px; font-size: 11px; text-align: left; }
-  .selection-box { margin-top: 0; }
+  .selection-box { margin-top: 0; align-items: flex-start; gap: 10px; }
   .workspace-main { padding: 35px 0 80px; }
   .page-heading { display: grid; align-items: start; }
   .type-catalog { grid-template-columns: repeat(2, minmax(0, 1fr)); }

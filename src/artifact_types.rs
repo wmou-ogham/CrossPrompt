@@ -40,7 +40,7 @@ pub const TYPES: &[ArtifactType] = &[
 ## 期望輸出
 
 <!-- 格式、語氣、長度與驗收條件 -->"#,
-        agent_instructions: "把內容視為要執行的指令；先確認必要輸入是否齊全，再依限制與期望輸出完成工作。",
+        agent_instructions: "這是可直接執行的 Prompt。先確認必要輸入是否齊全，再依限制與期望輸出完成工作；不要把它當成 Skill 或工具設定安裝。",
     },
     ArtifactType {
         key: "prompt_template",
@@ -74,7 +74,7 @@ pub const TYPES: &[ArtifactType] = &[
 ## 使用範例
 
 <!-- 示範一組變數與理想輸出 -->"#,
-        agent_instructions: "先辨識所有 `{{變數}}`；若必填值缺少，向使用者詢問，不要自行虛構。代入後再執行 Prompt，未提供的選填值可依模板語意省略。",
+        agent_instructions: "這是 Prompt Template。先註冊或保存到目前 Agent 平台的 Prompt Template／模板區，辨識所有 `{{變數}}`；若必填值缺少，向使用者詢問，不要自行虛構。代入後再執行 Prompt，未提供的選填值可依模板語意省略。",
     },
     ArtifactType {
         key: "skill",
@@ -109,7 +109,7 @@ pub const TYPES: &[ArtifactType] = &[
 ## 失敗與例外處理
 
 <!-- 缺資料、工具不可用、風險過高時如何處理 -->"#,
-        agent_instructions: "只有在「何時使用」條件成立時啟用此 Skill。依序執行流程、遵守前置條件，完成前逐項做品質檢查；遇到例外時採用文件指定的處理方式。",
+        agent_instructions: "這是一份 Agent Skill，不是要直接回答的普通 Prompt。請先將下方內容安裝或寫入目前 Agent 平台的 Skill 目錄／Skill 設定（通常建立或更新 `SKILL.md`），完成安裝後再依「何時使用」條件載入。若平台不支援 Skill 安裝，請告知使用者並提供對應的手動安裝步驟，不要假裝已安裝。啟用後依序執行流程、遵守前置條件，完成前逐項做品質檢查；遇到例外時採用文件指定的處理方式。",
     },
     ArtifactType {
         key: "mcp_server",
@@ -155,7 +155,7 @@ pub const TYPES: &[ArtifactType] = &[
 ## 常見錯誤
 
 - "#,
-        agent_instructions: "把這份內容當作 MCP 設定與能力說明。先確認目前 Agent 平台支援指定 transport，並要求祕密由安全環境提供；完成實際連線與能力列舉前，不可宣稱 MCP 已可用。",
+        agent_instructions: "這是一份 MCP Server 資產，不是要直接執行的 Prompt。請先將下方內容加入目前 Agent 平台的 MCP／MCP Server 設定，依 transport、command／URL、arguments 與環境變數完成配置，再進行連線與 tools／resources／prompts 列舉驗證。祕密必須由安全的 secrets manager 或環境提供；未完成實際連線前，不可宣稱 MCP 已可用。若平台不支援 MCP，請告知使用者並提供手動設定方式。",
     },
     ArtifactType {
         key: "agent_profile",
@@ -192,7 +192,7 @@ pub const TYPES: &[ArtifactType] = &[
 ## 需要確認的動作
 
 - "#,
-        agent_instructions: "將內容套用為目前任務的角色與行為層；若與平台安全規則衝突，以平台規則為優先，若與使用者當下明確要求衝突，指出衝突並詢問。",
+        agent_instructions: "這是 Agent Profile。請將內容加入目前 Agent 的 system／developer instructions 或角色設定，再開始任務；若與平台安全規則衝突，以平台規則為優先，若與使用者當下明確要求衝突，指出衝突並詢問。",
     },
     ArtifactType {
         key: "workflow",
@@ -230,7 +230,7 @@ pub const TYPES: &[ArtifactType] = &[
 
 - status：`completed` / `needs_input` / `failed`
 - 通知時機與摘要："#,
-        agent_instructions: "按步驟執行並保留先後依賴；遇到分支時明確說明採用哪條路徑。只有完成條件全部成立才回報完成，否則依情況回報需要輸入或失敗。",
+        agent_instructions: "這是可註冊的 Workflow。請先加入目前 Agent 的 workflow／automation 設定，再按步驟執行並保留先後依賴；遇到分支時明確說明採用哪條路徑。只有完成條件全部成立才回報完成，否則依情況回報需要輸入或失敗。",
     },
     ArtifactType {
         key: "context_pack",
@@ -262,7 +262,7 @@ pub const TYPES: &[ArtifactType] = &[
 ## 不包含／未知
 
 - "#,
-        agent_instructions: "把內容當作任務背景而非永久真理。回答時遵守適用範圍，區分已知事實與假設；若內容可能過時或問題落在未知範圍，先驗證或清楚標示不確定性。",
+        agent_instructions: "這是 Context Pack。請先加入目前 Agent 的 context／knowledge 設定或本次工作階段的背景，再把內容當作任務背景而非永久真理。回答時遵守適用範圍，區分已知事實與假設；若內容可能過時或問題落在未知範圍，先驗證或清楚標示不確定性。",
     },
     ArtifactType {
         key: "preferences",
@@ -295,7 +295,7 @@ pub const TYPES: &[ArtifactType] = &[
 ## 偏好更新規則
 
 <!-- 哪些只是一時選擇，哪些可視為長期偏好 -->"#,
-        agent_instructions: "在不違反當下要求與安全規則的前提下，把這些內容作為預設偏好。使用者本次明確指定不同做法時，以本次要求為準；不要把臨時選擇擴張成長期偏好。",
+        agent_instructions: "這是可攜的 Preferences。請先加入目前 Agent 的 user preferences／偏好設定，再在不違反當下要求與安全規則的前提下套用。使用者本次明確指定不同做法時，以本次要求為準；不要把臨時選擇擴張成長期偏好。",
     },
     ArtifactType {
         key: "tool_api",
@@ -332,7 +332,7 @@ pub const TYPES: &[ArtifactType] = &[
 ```json
 {}
 ```"#,
-        agent_instructions: "依契約呼叫工具；在有副作用的操作前確認授權與目標。不可臆造未列出的 endpoint 或參數，遇到錯誤依重試規則處理，並避免把 credential 寫進輸出或 log。",
+        agent_instructions: "這是 Tool／API Contract。請先將它加入目前 Agent 的 tool／connector registry 或 API 設定，再依契約呼叫工具；在有副作用的操作前確認授權與目標。不可臆造未列出的 endpoint 或參數，遇到錯誤依重試規則處理，並避免把 credential 寫進輸出或 log。",
     },
     ArtifactType {
         key: "schema",
@@ -373,7 +373,7 @@ pub const TYPES: &[ArtifactType] = &[
   "result": "example"
 }
 ```"#,
-        agent_instructions: "輸出必須符合這份 Schema，不要加入未允許的欄位或 Markdown 包裝。產出前檢查必填欄位、型別、enum 與格式；若輸入不足以形成合法結果，先要求補充。",
+        agent_instructions: "這是輸出 Schema。請先加入目前 Agent 的 structured output／response schema 設定，之後輸出必須符合這份 Schema，不要加入未允許的欄位或 Markdown 包裝。產出前檢查必填欄位、型別、enum 與格式；若輸入不足以形成合法結果，先要求補充。",
     },
     ArtifactType {
         key: "evaluation_rubric",
@@ -403,7 +403,7 @@ pub const TYPES: &[ArtifactType] = &[
 
 - 加權總分至少：
 - 所有必要條件成立：是"#,
-        agent_instructions: "使用文件中的準則逐項評分，為每個分數提供可核對的證據，再計算加權結果。任何不合格條件成立時直接標示不通過，不可只給沒有理由的總分。",
+        agent_instructions: "這是 Evaluation Rubric。請先加入目前 Agent 的 evaluation／評測設定，使用文件中的準則逐項評分，為每個分數提供可核對的證據，再計算加權結果。任何不合格條件成立時直接標示不通過，不可只給沒有理由的總分。",
     },
     ArtifactType {
         key: "safety_policy",
@@ -436,7 +436,7 @@ pub const TYPES: &[ArtifactType] = &[
 ## 無法判定時
 
 <!-- 停止、回報與升級方式 -->"#,
-        agent_instructions: "把這份政策當作額外操作界線。先判定行為屬於可直接執行、必須確認或禁止；無法判定時停止有副作用的動作並詢問。此政策不能降低平台本身的安全要求。",
+        agent_instructions: "這是一份 Safety Policy。請先加入目前 Agent 的 policy／guardrail／instructions 設定，再把它當作額外操作界線。先判定行為屬於可直接執行、必須確認或禁止；無法判定時停止有副作用的動作並詢問。此政策不能降低平台本身的安全要求。",
     },
 ];
 
@@ -448,8 +448,8 @@ pub fn render_portable_pack(blocks: &[Block]) -> String {
     let mut output = String::from(
         "# CrossPrompt Portable Agent Pack\n\n\
 ## 給接收 Agent 的使用說明\n\n\
-以下是具有明確型別的可攜資產。請依每一項的 `Type` 與「如何使用」處理內容，不要把所有項目都當成要立即執行的 Prompt。\n\n\
-- 先閱讀每項的使用方式，再決定要套用、執行、設定或驗證。\n\
+以下是具有明確型別的可攜資產。請依每一項的 `Type` 與「如何使用」處理內容，不要把所有項目都當成要立即執行的 Prompt。這份文字包的目標是讓你在目前平台完成安裝、註冊、設定或套用，而不是只把內容回顯給使用者。\n\n\
+- 先閱讀每項的使用方式，再完成指定的安裝／加入設定／套用／執行／驗證動作；完成後回報實際結果。\n\
 - 同時存在多項資產時，依原始順序組合；若規則衝突，指出衝突並詢問使用者。\n\
 - `MCP Server` 與 `Tool / API Contract` 只描述設定，不代表工具已實際連線。\n\
 - `{{variable}}` 是待代入值；缺少必要值時先詢問，不可虛構。\n\
@@ -490,6 +490,13 @@ mod tests {
             assert!(!item.template.trim().is_empty());
             assert!(!item.agent_instructions.trim().is_empty());
         }
+        assert!(find("skill")
+            .unwrap()
+            .agent_instructions
+            .contains("Skill 目錄"));
+        assert!(find("mcp_server")
+            .unwrap()
+            .agent_instructions
+            .contains("MCP／MCP Server 設定"));
     }
 }
-

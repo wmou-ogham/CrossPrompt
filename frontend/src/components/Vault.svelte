@@ -25,6 +25,8 @@
 
   $: blocks = snapshot?.blocks || [];
   $: bundles = snapshot?.bundles || [];
+  $: selectedBlocks = blocks.filter((block) => selected.includes(block.id));
+  $: selectedRawSkill = selectedBlocks.length === 1 && selectedBlocks[0].block_type === 'skill' ? selectedBlocks[0] : null;
   $: selectedType = newBlock ? typeFor(newBlock.block_type) : null;
 
   onMount(load);
@@ -126,7 +128,14 @@
         method: 'POST', body: { block_ids: ids }, secret
       });
       await copyText(result.text);
-    }, `已複製 ${ids.length} 個 Agent-ready 資產`);
+    }, `已複製 ${ids.length} 個可安裝資產`);
+  }
+
+  async function copyRawSkill(block) {
+    if (!block || block.block_type !== 'skill') return;
+    await run(async () => {
+      await copyText(block.content);
+    }, '已複製 RAW Skill 內容');
   }
 
   async function dropBefore(targetId) {
@@ -228,8 +237,15 @@ Base URL: ${root}
 讀取完整 Vault：
 GET ${root}/vault
 
-先讀取可用型別、預設模板與各型別的 Agent 使用方式：
+先讀取可用型別、預設模板與各型別的 Agent 使用方式。注意：讀到資產後要依型別完成安裝／加入設定，不要只把內容當普通 Prompt 回覆：
 GET ${root}/artifact-types
+
+Skill：把內容安裝到目前 Agent 平台的 Skill 目錄或 Skill 設定（通常建立或更新 SKILL.md），再依觸發條件載入。若平台不支援 Skill，先告知使用者，不能假裝已安裝。
+MCP Server：把內容加入目前 Agent 平台的 MCP／MCP Server 設定，依 transport、command／URL、arguments 與環境變數配置，完成實際連線與 tools 列舉後才可使用。
+Prompt Template：加入 Prompt Template／模板區，先填入所有必要變數再執行。
+Agent Profile：加入 system／developer instructions 或角色設定後再開始任務。
+Tool / API Contract：加入 tool／connector registry 或 API 設定後才依契約呼叫。
+Schema：加入 structured output／response schema 設定並驗證輸出。
 
 新增型別化資產（block_type 必須使用型別目錄中的 key；省略時相容為 prompt）：
 POST ${root}/blocks?source=YOUR_AI_NAME
@@ -373,7 +389,10 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
       </nav>
       <div class="selection-box">
         <span>已選 {selected.length} 個</span>
-        <button class="primary compact" disabled={!selected.length || busy} on:click={() => copySelected()}>複製 Agent Pack</button>
+        <div class="selection-actions">
+          <button class="primary compact" disabled={!selected.length || busy} on:click={() => copySelected()}>複製給 Agent 貼上安裝</button>
+          {#if selectedRawSkill}<button class="quiet compact" disabled={busy} on:click={() => copyRawSkill(selectedRawSkill)}>複製 RAW Skill</button>{/if}
+        </div>
       </div>
     </aside>
 
@@ -414,7 +433,8 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
                 </select>
                 <input class="block-title" bind:value={block.title} maxlength="100" aria-label="Block 標題" />
                 <span class="version">v{block.version}</span>
-                <button class="quiet compact" on:click={() => copySelected([block.id])}>複製</button>
+                <button class="quiet compact" on:click={() => copySelected([block.id])}>複製給 Agent 貼上安裝</button>
+                {#if block.block_type === 'skill'}<button class="quiet compact raw-copy" on:click={() => copyRawSkill(block)}>複製 RAW Skill</button>{/if}
                 <button class="quiet compact" on:click={() => saveBlock(block)} disabled={busy}>儲存</button>
                 <button class="danger-link compact" on:click={() => removeBlock(block)}>刪除</button>
               </div>
@@ -445,7 +465,7 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
               <p>{bundle.block_ids.length} 個資產</p>
               <ol>{#each bundle.block_ids as id}<li><span class="inline-type">{typeFor(blocks.find((block) => block.id === id)?.block_type)?.short_label || 'Unknown'}</span>{blocks.find((block) => block.id === id)?.title || '已移除的資產'}</li>{/each}</ol>
               <div class="button-row">
-                <button class="primary compact" on:click={() => copySelected(bundle.block_ids)}>複製</button>
+                <button class="primary compact" on:click={() => copySelected(bundle.block_ids)}>複製給 Agent 貼上安裝</button>
                 <button class="quiet compact" on:click={() => selected = [...bundle.block_ids]}>載入勾選</button>
                 <button class="quiet compact" on:click={() => updateBundle(bundle)} disabled={!selected.length}>以目前勾選更新</button>
                 <button class="danger-link compact" on:click={() => removeBundle(bundle)}>刪除</button>

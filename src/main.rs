@@ -379,6 +379,7 @@ mod tests {
         let text = portable["text"].as_str().unwrap();
         assert!(text.contains("給接收 Agent 的使用說明"));
         assert!(text.contains("Skill / 專業技能 (`skill`)"));
+        assert!(text.contains("安裝或寫入目前 Agent 平台的 Skill 目錄"));
         assert!(text.find("Research skill").unwrap() < text.find("System prompt").unwrap());
 
         let response = app
