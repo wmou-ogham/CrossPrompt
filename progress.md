@@ -45,6 +45,14 @@
 - [x] Flush pending edits before copying and report autosave/conflict states
 - [x] Rebuild, deploy, and verify the updated staging stack
 
+## Relaxed limits and GitHub PR checks
+
+- [x] Raise the per-IP daily Vault creation limit to 100
+- [x] Raise the per-Vault Block limit to 1,000
+- [x] Raise the per-Vault Bundle limit to 200
+- [x] Add a GitHub Action that runs only for opened, synchronized, or reopened PRs
+- [ ] Push the signed commits to the requested GitHub repository
+
 ## Notes
 
 - Project host: `moriss@10.121.180.185`
