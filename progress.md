@@ -37,6 +37,14 @@
 - [x] Rename packaged copy actions to clarify “paste to Agent for installation”
 - [x] Add acceptance coverage and redeploy the updated frontend/backend
 
+## Markdown editor and autosave
+
+- [x] Support Tab and Shift+Tab indentation in Markdown editors
+- [x] Make Asset actions directly clickable without draggable-editor focus interference
+- [x] Remove manual Block save action and add debounced automatic saving
+- [x] Flush pending edits before copying and report autosave/conflict states
+- [x] Rebuild, deploy, and verify the updated staging stack
+
 ## Notes
 
 - Project host: `moriss@10.121.180.185`
