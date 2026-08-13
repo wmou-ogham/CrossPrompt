@@ -1,7 +1,7 @@
 import { writable, get } from 'svelte/store';
 
 export const localeOptions = [
-  { key: 'zh-TW', label: '繁中' },
+  { key: 'zh-TW', label: '繁體中文' },
   { key: 'en', label: 'English' },
   { key: 'es', label: 'Español' },
   { key: 'fr', label: 'Français' }
@@ -128,7 +128,10 @@ export function setLocale(next) {
   if (!messages[next]) return;
   locale.set(next);
   if (typeof localStorage !== 'undefined') localStorage.setItem('crossprompt_locale', next);
-  if (typeof document !== 'undefined') document.documentElement.lang = next;
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = next;
+    window.dispatchEvent(new CustomEvent('crossprompt:locale', { detail: next }));
+  }
 }
 
 export function t(key, vars = {}) {

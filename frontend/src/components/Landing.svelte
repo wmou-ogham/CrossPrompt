@@ -19,6 +19,12 @@
   let error = '';
   let turnstileElement;
 
+  onMount(() => {
+    const handleLocaleChange = (event) => activeLocale = event.detail;
+    window.addEventListener('crossprompt:locale', handleLocaleChange);
+    return () => window.removeEventListener('crossprompt:locale', handleLocaleChange);
+  });
+
   onMount(async () => {
     try {
       config = await api('/config');

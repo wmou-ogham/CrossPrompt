@@ -19,6 +19,12 @@
   let error = '';
   let notice = '';
 
+  onMount(() => {
+    const handleLocaleChange = (event) => activeLocale = event.detail;
+    window.addEventListener('crossprompt:locale', handleLocaleChange);
+    return () => window.removeEventListener('crossprompt:locale', handleLocaleChange);
+  });
+
   onMount(async () => {
     if (!csrf) return;
     try {

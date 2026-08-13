@@ -28,6 +28,9 @@ code, pre, .code-field { font-family: "SFMono-Regular", Consolas, monospace; }
 .shell-wide { width: min(1480px, calc(100% - 40px)); margin-inline: auto; }
 .site-header { height: 72px; padding: 0 max(24px, calc((100vw - 1480px) / 2)); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); background: rgba(244,242,235,.95); position: sticky; top: 0; z-index: 30; backdrop-filter: blur(12px); }
 .header-actions { display: flex; align-items: center; gap: 14px; }
+.language-switcher { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.language-icon { font-size: 14px; line-height: 1; }
+.language-label { font-weight: 600; letter-spacing: .01em; }
 .language-switcher select { appearance: none; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--ink); padding: 7px 28px 7px 11px; font: inherit; font-size: 12px; cursor: pointer; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .landing-header { position: relative; }

@@ -35,6 +35,12 @@
   $: selectedBlocks = blocks.filter((block) => selected.includes(block.id));
   $: selectedType = newBlock ? typeFor(newBlock.block_type) : null;
 
+  onMount(() => {
+    const handleLocaleChange = (event) => activeLocale = event.detail;
+    window.addEventListener('crossprompt:locale', handleLocaleChange);
+    return () => window.removeEventListener('crossprompt:locale', handleLocaleChange);
+  });
+
   onMount(load);
 
   async function load() {

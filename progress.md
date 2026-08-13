@@ -68,6 +68,13 @@
 - [x] Make Tab and Shift+Tab indent or unindent Markdown list items like a code editor
 - [x] Rebuild and verify the updated frontend
 
+## Immediate language switching
+
+- [x] Refresh Landing, Vault, and Admin UI immediately when locale changes
+- [x] Add a clear globe icon and bilingual `Language / 語言` selector label
+- [x] Use full native language names in the selector
+- [x] Rebuild and verify the language selector behavior
+
 ## Notes
 
 - Project host: `moriss@10.121.180.185`
