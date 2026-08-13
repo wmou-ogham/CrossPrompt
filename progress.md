@@ -51,7 +51,7 @@
 - [x] Raise the per-Vault Block limit to 1,000
 - [x] Raise the per-Vault Bundle limit to 200
 - [x] Add a GitHub Action that runs only for opened, synchronized, or reopened PRs
-- [ ] Push the signed commits to the requested GitHub repository
+- [x] Push the signed commits to the requested GitHub repository
 
 ## Notes
 
