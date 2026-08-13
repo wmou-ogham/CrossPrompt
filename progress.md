@@ -29,6 +29,14 @@
 - [x] Add automated tests and operational documentation
 - [x] Rebuild and verify the deployed staging stack
 
+## Installable portable copy
+
+- [x] Make the Agent Pack explicitly instruct Agents to install or register each asset type
+- [x] Add explicit Skill installation guidance and MCP configuration guidance
+- [x] Add separate RAW Skill copy actions containing only the Skill Markdown
+- [x] Rename packaged copy actions to clarify “paste to Agent for installation”
+- [x] Add acceptance coverage and redeploy the updated frontend/backend
+
 ## Notes
 
 - Project host: `moriss@10.121.180.185`
