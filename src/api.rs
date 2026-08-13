@@ -75,7 +75,7 @@ pub async fn create_vault(
 }
 
 pub async fn get_vault(State(state): State<AppState>, headers: HeaderMap) -> AppResult<Json<Value>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     Ok(Json(serde_json::to_value(db::snapshot(&state.pool, vault).await?).unwrap()))
 }
 
@@ -83,7 +83,7 @@ pub async fn get_vault(State(state): State<AppState>, headers: HeaderMap) -> App
 pub struct RenameVaultInput { pub name: String }
 
 pub async fn rename_vault(State(state): State<AppState>, headers: HeaderMap, Json(input): Json<RenameVaultInput>) -> AppResult<Json<Vault>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let name = clean_name(&input.name)?;
     let now = Utc::now().to_rfc3339();
     sqlx::query("UPDATE vaults SET name = ?, updated_at = ? WHERE id = ?")
@@ -94,7 +94,7 @@ pub async fn rename_vault(State(state): State<AppState>, headers: HeaderMap, Jso
 }
 
 pub async fn delete_vault(State(state): State<AppState>, headers: HeaderMap) -> AppResult<StatusCode> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let now = Utc::now().to_rfc3339();
     sqlx::query("UPDATE vaults SET status = 'deleted', deleted_by = 'user', deleted_at = ?, updated_at = ? WHERE id = ?")
         .bind(&now).bind(&now).bind(&vault.id).execute(&state.pool).await?;
@@ -117,10 +117,14 @@ pub async fn restore_vault(State(state): State<AppState>, headers: HeaderMap) ->
 }
 
 pub async fn rotate_secret(State(state): State<AppState>, headers: HeaderMap) -> AppResult<Json<Value>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let secret = new_secret();
+    let mut tx = state.pool.begin().await?;
     sqlx::query("UPDATE vaults SET secret_hash = ?, updated_at = ? WHERE id = ?")
-        .bind(digest(&secret)).bind(Utc::now().to_rfc3339()).bind(&vault.id).execute(&state.pool).await?;
+        .bind(digest(&secret)).bind(Utc::now().to_rfc3339()).bind(&vault.id).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM vault_email_sessions WHERE vault_id = ?")
+        .bind(&vault.id).execute(&mut *tx).await?;
+    tx.commit().await?;
     Ok(Json(json!({ "secret": secret, "manage_url": format!("{}/#/v/{}", state.config.public_base_url, secret) })))
 }
 
@@ -133,7 +137,7 @@ fn clean_source(source: &str) -> String {
 }
 
 pub async fn list_blocks(State(state): State<AppState>, headers: HeaderMap) -> AppResult<Json<Vec<Block>>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     Ok(Json(sqlx::query_as::<_, Block>("SELECT * FROM blocks WHERE vault_id = ? ORDER BY position, created_at")
         .bind(vault.id).fetch_all(&state.pool).await?))
 }
@@ -146,7 +150,7 @@ pub async fn portable_text(
     headers: HeaderMap,
     Json(input): Json<PortableTextInput>,
 ) -> AppResult<Json<Value>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     if input.block_ids.is_empty() {
         return Err(AppError::bad("block_ids must contain at least one block"));
     }
@@ -188,7 +192,7 @@ pub struct CreateBlockInput {
 fn default_block_type() -> String { "prompt".into() }
 
 pub async fn create_block(State(state): State<AppState>, headers: HeaderMap, Query(source): Query<SourceQuery>, Json(input): Json<CreateBlockInput>) -> AppResult<(StatusCode, Json<Block>)> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     validate_block(&input.title, &input.content)?;
     validate_block_type(&input.block_type)?;
     ensure_block_capacity(&state, &vault.id, input.content.len() as i64, true).await?;
@@ -211,7 +215,7 @@ pub struct UpdateBlockInput {
 }
 
 pub async fn update_block(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>, Query(source): Query<SourceQuery>, Json(input): Json<UpdateBlockInput>) -> AppResult<Json<Block>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     validate_block(&input.title, &input.content)?;
     let before = block_for(&state, &vault.id, &id).await?;
     let block_type = input.block_type.as_deref().unwrap_or(&before.block_type);
@@ -230,7 +234,7 @@ pub async fn update_block(State(state): State<AppState>, headers: HeaderMap, Pat
 pub struct VersionInput { pub version: i64 }
 
 pub async fn delete_block(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>, Query(source): Query<SourceQuery>, Json(input): Json<VersionInput>) -> AppResult<StatusCode> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let before = block_for(&state, &vault.id, &id).await?;
     let result = sqlx::query("DELETE FROM blocks WHERE id = ? AND vault_id = ? AND version = ?")
         .bind(&id).bind(&vault.id).bind(input.version).execute(&state.pool).await?;
@@ -255,7 +259,7 @@ pub async fn delete_block(State(state): State<AppState>, headers: HeaderMap, Pat
 pub struct ReorderBlocksInput { pub block_ids: Vec<String> }
 
 pub async fn reorder_blocks(State(state): State<AppState>, headers: HeaderMap, Json(input): Json<ReorderBlocksInput>) -> AppResult<StatusCode> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let existing = sqlx::query_scalar::<_, String>("SELECT id FROM blocks WHERE vault_id = ? ORDER BY position")
         .bind(&vault.id).fetch_all(&state.pool).await?;
     let mut a = existing.clone(); let mut b = input.block_ids.clone(); a.sort(); b.sort();
@@ -271,7 +275,7 @@ pub async fn reorder_blocks(State(state): State<AppState>, headers: HeaderMap, J
 }
 
 pub async fn list_bundles(State(state): State<AppState>, headers: HeaderMap) -> AppResult<Json<Vec<Bundle>>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let rows = sqlx::query_as::<_, BundleRow>("SELECT * FROM bundles WHERE vault_id = ? ORDER BY created_at").bind(vault.id).fetch_all(&state.pool).await?;
     Ok(Json(rows.into_iter().map(Bundle::try_from).collect::<Result<_, _>>().map_err(anyhow::Error::from)?))
 }
@@ -280,7 +284,7 @@ pub async fn list_bundles(State(state): State<AppState>, headers: HeaderMap) -> 
 pub struct CreateBundleInput { pub name: String, pub block_ids: Vec<String> }
 
 pub async fn create_bundle(State(state): State<AppState>, headers: HeaderMap, Query(source): Query<SourceQuery>, Json(input): Json<CreateBundleInput>) -> AppResult<(StatusCode, Json<Bundle>)> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bundles WHERE vault_id = ?").bind(&vault.id).fetch_one(&state.pool).await?;
     if count >= 20 { return Err(AppError::bad("vault has reached the 20 bundle limit")); }
     validate_bundle(&state, &vault.id, &input.name, &input.block_ids).await?;
@@ -297,7 +301,7 @@ pub async fn create_bundle(State(state): State<AppState>, headers: HeaderMap, Qu
 pub struct UpdateBundleInput { pub name: String, pub block_ids: Vec<String>, pub version: i64 }
 
 pub async fn update_bundle(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>, Query(source): Query<SourceQuery>, Json(input): Json<UpdateBundleInput>) -> AppResult<Json<Bundle>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     validate_bundle(&state, &vault.id, &input.name, &input.block_ids).await?;
     let before = bundle_for(&state, &vault.id, &id).await?;
     let result = sqlx::query("UPDATE bundles SET name = ?, block_ids = ?, version = version + 1, updated_at = ? WHERE id = ? AND vault_id = ? AND version = ?")
@@ -310,7 +314,7 @@ pub async fn update_bundle(State(state): State<AppState>, headers: HeaderMap, Pa
 }
 
 pub async fn delete_bundle(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<String>, Query(source): Query<SourceQuery>, Json(input): Json<VersionInput>) -> AppResult<StatusCode> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let before = bundle_for(&state, &vault.id, &id).await?;
     let result = sqlx::query("DELETE FROM bundles WHERE id = ? AND vault_id = ? AND version = ?")
         .bind(&id).bind(&vault.id).bind(input.version).execute(&state.pool).await?;
@@ -324,14 +328,14 @@ pub async fn delete_bundle(State(state): State<AppState>, headers: HeaderMap, Pa
 pub struct RevisionQuery { pub limit: Option<i64> }
 
 pub async fn list_revisions(State(state): State<AppState>, headers: HeaderMap, Query(query): Query<RevisionQuery>) -> AppResult<Json<Vec<Revision>>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let limit = query.limit.unwrap_or(50).clamp(1, 100);
     Ok(Json(sqlx::query_as::<_, Revision>("SELECT * FROM revisions WHERE vault_id = ? ORDER BY id DESC LIMIT ?")
         .bind(vault.id).bind(limit).fetch_all(&state.pool).await?))
 }
 
 pub async fn restore_revision(State(state): State<AppState>, headers: HeaderMap, Path(id): Path<i64>) -> AppResult<Json<Value>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let revision = sqlx::query_as::<_, Revision>("SELECT * FROM revisions WHERE id = ? AND vault_id = ?")
         .bind(id).bind(&vault.id).fetch_optional(&state.pool).await?.ok_or(AppError::NotFound)?;
     match revision.resource_type.as_str() {
@@ -347,13 +351,13 @@ pub async fn restore_revision(State(state): State<AppState>, headers: HeaderMap,
 pub struct NotificationTargetInput { pub kind: String, pub url: String, #[serde(default)] pub headers: std::collections::BTreeMap<String, String> }
 
 pub async fn get_notification_target(State(state): State<AppState>, headers: HeaderMap) -> AppResult<Json<Value>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let target = notifications::load_target(&state, &vault.id).await.map_err(anyhow::Error::from)?;
     Ok(Json(match target { Some((stored, config)) => serde_json::to_value(notifications::view(&stored, &config)).unwrap(), None => Value::Null }))
 }
 
 pub async fn put_notification_target(State(state): State<AppState>, headers: HeaderMap, Json(input): Json<NotificationTargetInput>) -> AppResult<Json<Value>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let config = NotificationConfig { url: input.url, headers: input.headers };
     notifications::validate_target(&input.kind, &config).await.map_err(|error| AppError::bad(error.to_string()))?;
     let encrypted = encrypt_config(&state.config.master_key, &config).map_err(AppError::Internal)?;
@@ -365,13 +369,13 @@ pub async fn put_notification_target(State(state): State<AppState>, headers: Hea
 }
 
 pub async fn delete_notification_target(State(state): State<AppState>, headers: HeaderMap) -> AppResult<StatusCode> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     sqlx::query("DELETE FROM notification_targets WHERE vault_id = ?").bind(vault.id).execute(&state.pool).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn test_notification_target(State(state): State<AppState>, headers: HeaderMap) -> AppResult<Json<Value>> {
-    let vault = user_vault(&state.pool, &headers, &state.limits).await?;
+    let vault = user_vault(&state, &headers).await?;
     let (stored, config) = notifications::load_target(&state, &vault.id).await.map_err(AppError::Internal)?.ok_or_else(|| AppError::bad("notification target is not configured"))?;
     let payload = CallbackPayload { status: "completed".into(), title: "CrossPrompt test".into(), message: "Your notification target is connected.".into(), source: Some("CrossPrompt".into()), url: Some(format!("{}/#/v", state.config.public_base_url)) };
     let status = notifications::send(&state, &vault.id, &stored, &config, &payload).await.map_err(|_| AppError::Upstream)?;
@@ -395,6 +399,7 @@ pub async fn config_public(State(state): State<AppState>) -> Json<Value> {
     Json(json!({
         "turnstile_site_key": state.config.turnstile_site_key,
         "turnstile_required": state.config.turnstile_secret_key.is_some(),
+        "email_login_enabled": state.config.smtp.is_some(),
         "public_base_url": state.config.public_base_url,
     }))
 }

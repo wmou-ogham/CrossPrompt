@@ -26,7 +26,10 @@ async fn run(state: &AppState) -> anyhow::Result<()> {
         .bind(empty_cutoff).execute(&mut *tx).await?.rows_affected();
     let deleted = sqlx::query("DELETE FROM vaults WHERE status = 'deleted' AND deleted_at < ?")
         .bind(delete_cutoff).execute(&mut *tx).await?.rows_affected();
-    sqlx::query("DELETE FROM admin_sessions WHERE expires_at < ?").bind(sessions_now).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM admin_sessions WHERE expires_at < ?").bind(&sessions_now).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM vault_email_sessions WHERE expires_at < ?").bind(&sessions_now).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM email_otp_challenges WHERE expires_at < ? OR consumed_at IS NOT NULL")
+        .bind(&sessions_now).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM creation_limits WHERE bucket < ?").bind(creation_cutoff).execute(&mut *tx).await?;
     tx.commit().await?;
     sqlx::query("PRAGMA wal_checkpoint(PASSIVE)").execute(&state.pool).await?;
@@ -62,6 +65,7 @@ mod tests {
             turnstile_site_key: None,
             cookie_secure: false,
             trust_proxy: false,
+            smtp: None,
         };
         let pool = db::connect(&config).await.unwrap();
         let state = AppState::new(config, pool.clone()).unwrap();

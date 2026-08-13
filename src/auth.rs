@@ -10,19 +10,29 @@ use crate::{
     config::Config,
     error::{AppError, AppResult},
     models::Vault,
-    rate_limit::RateLimits,
     security::{client_ip, digest, keyed_digest, salted_digest},
+    state::AppState,
 };
 
-pub async fn user_vault(pool: &SqlitePool, headers: &HeaderMap, limits: &RateLimits) -> AppResult<Vault> {
-    let token = bearer(headers)?;
-    let hash = digest(token);
-    let vault = sqlx::query_as::<_, Vault>("SELECT * FROM vaults WHERE secret_hash = ?")
-        .bind(hash)
-        .fetch_optional(pool)
+pub async fn user_vault(state: &AppState, headers: &HeaderMap) -> AppResult<Vault> {
+    let vault = if let Some(token) = bearer(headers) {
+        sqlx::query_as::<_, Vault>("SELECT * FROM vaults WHERE secret_hash = ?")
+            .bind(digest(token))
+            .fetch_optional(&state.pool)
+            .await?
+    } else if let Some(token) = cookie(headers, "crossprompt_vault") {
+        sqlx::query_as::<_, Vault>(
+            "SELECT v.* FROM vaults v JOIN vault_email_sessions s ON s.vault_id = v.id WHERE s.token_digest = ? AND s.expires_at > ? AND s.email = v.email AND v.email_verified_at IS NOT NULL",
+        )
+        .bind(keyed_digest(&state.config.session_secret, &token))
+        .bind(Utc::now().to_rfc3339())
+        .fetch_optional(&state.pool)
         .await?
-        .ok_or(AppError::Unauthorized)?;
-    if !limits.check(format!("vault:{}", vault.id), 120, Duration::from_secs(60)) {
+    } else {
+        None
+    }
+    .ok_or(AppError::Unauthorized)?;
+    if !state.limits.check(format!("vault:{}", vault.id), 120, Duration::from_secs(60)) {
         return Err(AppError::RateLimited);
     }
     match vault.status.as_str() {
@@ -33,7 +43,7 @@ pub async fn user_vault(pool: &SqlitePool, headers: &HeaderMap, limits: &RateLim
 }
 
 pub async fn user_vault_allow_deleted(pool: &SqlitePool, headers: &HeaderMap) -> AppResult<Vault> {
-    let hash = digest(bearer(headers)?);
+    let hash = digest(bearer(headers).ok_or(AppError::Unauthorized)?);
     sqlx::query_as::<_, Vault>("SELECT * FROM vaults WHERE secret_hash = ?")
         .bind(hash)
         .fetch_optional(pool)
@@ -96,16 +106,19 @@ pub fn ip_hash(config: &Config, headers: &HeaderMap, peer: SocketAddr) -> String
     salted_digest(&config.ip_hash_salt, &client_ip(headers, peer, config.trust_proxy).to_string())
 }
 
-fn bearer(headers: &HeaderMap) -> AppResult<&str> {
+fn bearer(headers: &HeaderMap) -> Option<&str> {
     headers
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
         .filter(|value| !value.is_empty())
-        .ok_or(AppError::Unauthorized)
 }
 
-fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
+pub fn has_bearer(headers: &HeaderMap) -> bool {
+    bearer(headers).is_some()
+}
+
+pub fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
     headers.get(header::COOKIE)?.to_str().ok()?.split(';').find_map(|part| {
         let (key, value) = part.trim().split_once('=')?;
         (key == name).then(|| value.to_owned())

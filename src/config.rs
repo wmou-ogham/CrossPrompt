@@ -22,6 +22,16 @@ pub struct Config {
     pub turnstile_site_key: Option<String>,
     pub cookie_secure: bool,
     pub trust_proxy: bool,
+    pub smtp: Option<SmtpConfig>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SmtpConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub from: String,
 }
 
 impl Config {
@@ -46,6 +56,30 @@ impl Config {
         let turnstile_secret_key = optional_value("CROSSPROMPT_TURNSTILE_SECRET_KEY");
         let turnstile_site_key = optional_value("CROSSPROMPT_TURNSTILE_SITE_KEY");
         let cookie_secure = bool_value("CROSSPROMPT_COOKIE_SECURE", production);
+        let smtp_host = optional_value("CROSSPROMPT_SMTP_HOST");
+        let smtp_from = optional_value("CROSSPROMPT_SMTP_FROM");
+        let smtp_username = optional_value("CROSSPROMPT_SMTP_USERNAME");
+        let smtp_password = optional_value("CROSSPROMPT_SMTP_PASSWORD");
+        if smtp_username.is_some() != smtp_password.is_some() {
+            bail!("SMTP username and password must be configured together");
+        }
+        if smtp_host.is_some() != smtp_from.is_some() {
+            bail!("CROSSPROMPT_SMTP_HOST and CROSSPROMPT_SMTP_FROM must be configured together");
+        }
+        let smtp = smtp_host
+            .zip(smtp_from)
+            .map(|(host, from)| -> Result<SmtpConfig> {
+                Ok(SmtpConfig {
+                    host,
+                    port: value("CROSSPROMPT_SMTP_PORT", "587")
+                        .parse()
+                        .context("invalid CROSSPROMPT_SMTP_PORT")?,
+                    username: smtp_username,
+                    password: smtp_password,
+                    from,
+                })
+            })
+            .transpose()?;
         let master_key = match env::var("CROSSPROMPT_MASTER_KEY") {
             Ok(raw) => decode_master_key(&raw)?,
             Err(_) if !production => {
@@ -110,6 +144,7 @@ impl Config {
             turnstile_site_key,
             cookie_secure,
             trust_proxy: bool_value("CROSSPROMPT_TRUST_PROXY", false),
+            smtp,
         })
     }
 }

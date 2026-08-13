@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 pub async fn document() -> Json<Value> {
     Json(json!({
       "openapi": "3.1.0",
-      "info": { "title": "CrossPrompt API", "version": "0.2.0", "description": "Manage an anonymous typed portable asset Vault and send completion callbacks." },
+      "info": { "title": "CrossPrompt API", "version": "0.3.0", "description": "Manage a typed portable asset Vault using a secret link or verified Email OTP session." },
       "servers": [{ "url": "/api/v1" }],
       "components": {
         "securitySchemes": { "vaultSecret": { "type": "http", "scheme": "bearer" } },
@@ -20,6 +20,12 @@ pub async fn document() -> Json<Value> {
         "/vault": { "get": { "summary": "Get the complete Vault snapshot" }, "patch": { "summary": "Rename the Vault" }, "delete": { "summary": "Soft-delete the Vault" } },
         "/vault/restore": { "post": { "summary": "Restore a user-deleted Vault within seven days" } },
         "/vault/rotate-secret": { "post": { "summary": "Rotate the only Vault secret" } },
+        "/email/login/request-code": { "post": { "security": [], "summary": "Request a login code without revealing whether the Email exists" } },
+        "/email/login/verify": { "post": { "security": [], "summary": "Verify a six-digit code and create a 30-day HttpOnly Vault session" } },
+        "/email/session": { "delete": { "security": [], "summary": "Log out the current Email Vault session" } },
+        "/vault/email/request-code": { "post": { "summary": "Send a verification code before binding an Email" } },
+        "/vault/email/verify": { "post": { "summary": "Verify and bind one unique Email to the current Vault" } },
+        "/vault/email": { "delete": { "summary": "Unbind Email; requires Bearer secret authentication" } },
         "/artifact-types": { "get": { "security": [], "summary": "List supported asset types, default templates, and Agent usage instructions" } },
         "/blocks": { "get": { "summary": "List typed assets" }, "post": { "summary": "Create a typed asset; block_type defaults to prompt" } },
         "/blocks/{id}": { "patch": { "summary": "Update a block with optimistic version checking" }, "delete": { "summary": "Delete a block with optimistic version checking" } },

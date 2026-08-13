@@ -5,6 +5,7 @@ mod auth;
 mod cleanup;
 mod config;
 mod db;
+mod email_auth;
 mod error;
 mod models;
 mod notifications;
@@ -62,6 +63,9 @@ fn router(state: AppState) -> Router {
         .route("/config", get(api::config_public))
         .route("/artifact-types", get(api::artifact_types))
         .route("/vaults", post(api::create_vault))
+        .route("/email/login/request-code", post(email_auth::request_login_code))
+        .route("/email/login/verify", post(email_auth::verify_login_code))
+        .route("/email/session", delete(email_auth::logout_email))
         .route(
             "/vault",
             get(api::get_vault)
@@ -70,6 +74,9 @@ fn router(state: AppState) -> Router {
         )
         .route("/vault/restore", post(api::restore_vault))
         .route("/vault/rotate-secret", post(api::rotate_secret))
+        .route("/vault/email/request-code", post(email_auth::request_bind_code))
+        .route("/vault/email/verify", post(email_auth::verify_bind_code))
+        .route("/vault/email", delete(email_auth::unbind_email))
         .route("/blocks", get(api::list_blocks).post(api::create_block))
         .route("/blocks/reorder", post(api::reorder_blocks))
         .route("/portable-text", post(api::portable_text))
@@ -230,6 +237,81 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CREATED);
         let created = response_json(response).await;
         let secret = created["secret"].as_str().unwrap().to_owned();
+        let vault_id = created["vault"]["id"].as_str().unwrap().to_owned();
+
+        let email = "owner@example.com";
+        let challenge_id = "login-challenge-test";
+        let code = "482913";
+        let now = chrono::Utc::now();
+        sqlx::query("UPDATE vaults SET email = ?, email_verified_at = ? WHERE id = ?")
+            .bind(email)
+            .bind(now.to_rfc3339())
+            .bind(&vault_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO email_otp_challenges (id, email, vault_id, purpose, code_digest, created_at, expires_at) VALUES (?, ?, ?, 'login', ?, ?, ?)")
+            .bind(challenge_id)
+            .bind(email)
+            .bind(&vault_id)
+            .bind(security::keyed_digest("test-session-secret-that-is-long-enough", &format!("{challenge_id}:{code}")))
+            .bind(now.to_rfc3339())
+            .bind((now + chrono::Duration::minutes(10)).to_rfc3339())
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let wrong_code = app
+            .clone()
+            .oneshot(session_request(
+                "POST",
+                "/api/v1/email/login/verify",
+                json!({"email":email,"code":"000000"}),
+                None,
+                None,
+                peer,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(wrong_code.status(), StatusCode::UNAUTHORIZED);
+
+        let email_login = app
+            .clone()
+            .oneshot(session_request(
+                "POST",
+                "/api/v1/email/login/verify",
+                json!({"email":email,"code":code}),
+                None,
+                None,
+                peer,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(email_login.status(), StatusCode::OK);
+        let email_cookie = email_login
+            .headers()
+            .get(header::SET_COOKIE)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_owned();
+        let email_vault = app
+            .clone()
+            .oneshot(session_request(
+                "GET",
+                "/api/v1/vault",
+                json!({}),
+                Some(&email_cookie),
+                None,
+                peer,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(email_vault.status(), StatusCode::OK);
+        assert_eq!(response_json(email_vault).await["vault"]["id"], vault_id);
 
         let response = app
             .clone()
@@ -486,6 +568,7 @@ mod tests {
             turnstile_site_key: None,
             cookie_secure: false,
             trust_proxy: false,
+            smtp: None,
         }
     }
 

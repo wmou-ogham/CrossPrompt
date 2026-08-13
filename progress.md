@@ -20,6 +20,15 @@
 - [x] Add automated coverage for typed templates and Agent-ready output
 - [x] Rebuild and verify the deployed staging stack
 
+## Email OTP access
+
+- [x] Add verified Vault email bindings, OTP challenges, and email sessions
+- [x] Add secure SMTP delivery, expiry, attempt limits, and rate limits
+- [x] Allow Vault APIs to authenticate by secret link or Email session
+- [ ] Add Email login, binding, unbinding, and logout interfaces
+- [ ] Add automated tests and operational documentation
+- [ ] Rebuild and verify the deployed staging stack
+
 ## Notes
 
 - Project host: `moriss@10.121.180.185`

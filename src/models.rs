@@ -15,6 +15,8 @@ pub struct Vault {
     pub created_at: String,
     pub updated_at: String,
     pub deleted_at: Option<String>,
+    pub email: Option<String>,
+    pub email_verified_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
