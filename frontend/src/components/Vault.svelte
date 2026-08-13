@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import Markdown from './Markdown.svelte';
   import { ApiError, api, copyText, downloadJson } from '../lib/api.js';
 
@@ -22,6 +22,8 @@
   let dragId = '';
   let target = { kind: 'ntfy', url: '', headers: '{}' };
   let emailBinding = { email: '', code: '', step: 'request' };
+  let blockSaveStates = {};
+  const blockSaveTimers = new Map();
 
   $: blocks = snapshot?.blocks || [];
   $: bundles = snapshot?.bundles || [];
@@ -95,24 +97,139 @@
     }, '型別化資產已建立');
   }
 
-  async function saveBlock(block) {
-    await run(async () => {
-      const updated = await api(`/blocks/${block.id}?source=web`, {
+  function setBlockSaveState(id, state) {
+    blockSaveStates = { ...blockSaveStates, [id]: state };
+  }
+
+  function clearBlockSaveTimer(id) {
+    const timer = blockSaveTimers.get(id);
+    if (timer) window.clearTimeout(timer);
+    blockSaveTimers.delete(id);
+  }
+
+  function scheduleBlockSave(block) {
+    if (!block?.id || !snapshot?.blocks?.some((item) => item.id === block.id)) return;
+    clearBlockSaveTimer(block.id);
+    setBlockSaveState(block.id, 'pending');
+    blockSaveTimers.set(block.id, window.setTimeout(() => {
+      blockSaveTimers.delete(block.id);
+      persistBlock(block);
+    }, 700));
+  }
+
+  async function persistBlock(block) {
+    if (!block?.id || !snapshot?.blocks?.some((item) => item.id === block.id)) return;
+    const draft = {
+      block_type: block.block_type,
+      title: block.title,
+      content: block.content,
+      position: block.position,
+      version: block.version
+    };
+    setBlockSaveState(block.id, 'saving');
+    try {
+      const updated = await api(`/blocks/${block.id}?source=web-autosave`, {
         method: 'PATCH',
-        body: { block_type: block.block_type, title: block.title, content: block.content, position: block.position, version: block.version },
+        body: draft,
         secret
       });
-      snapshot = { ...snapshot, blocks: blocks.map((item) => item.id === updated.id ? updated : item) };
-    }, 'Block 已儲存');
+      const current = snapshot.blocks.find((item) => item.id === block.id);
+      if (!current) return;
+      const changedWhileSaving = current.block_type !== draft.block_type
+        || current.title !== draft.title
+        || current.content !== draft.content
+        || current.position !== draft.position;
+      snapshot = {
+        ...snapshot,
+        blocks: blocks.map((item) => item.id === updated.id
+          ? (changedWhileSaving ? { ...item, version: updated.version, updated_at: updated.updated_at } : updated)
+          : item)
+      };
+      setBlockSaveState(block.id, changedWhileSaving ? 'pending' : 'saved');
+      if (changedWhileSaving) scheduleBlockSave(snapshot.blocks.find((item) => item.id === block.id));
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.status === 409) {
+        setBlockSaveState(block.id, 'conflict');
+        error = `「${block.title}」自動儲存遇到版本衝突，請重新載入後再編輯。`;
+      } else {
+        setBlockSaveState(block.id, 'error');
+        error = requestError.message;
+      }
+    }
   }
 
   async function removeBlock(block) {
     if (!confirm(`刪除「${block.title}」？可在版本歷史中還原。`)) return;
+    clearBlockSaveTimer(block.id);
     await run(async () => {
       await api(`/blocks/${block.id}?source=web`, { method: 'DELETE', body: { version: block.version }, secret });
       selected = selected.filter((id) => id !== block.id);
+      const nextStates = { ...blockSaveStates };
+      delete nextStates[block.id];
+      blockSaveStates = nextStates;
       await load();
     }, 'Block 已刪除');
+  }
+
+  function saveStateLabel(block) {
+    return {
+      pending: '等待自動儲存',
+      saving: '自動儲存中…',
+      saved: '已自動儲存',
+      conflict: '版本衝突',
+      error: '儲存失敗'
+    }[blockSaveStates[block.id]] || '';
+  }
+
+  async function handleMarkdownTab(event, draft) {
+    if (event.key !== 'Tab' || !draft) return;
+    event.preventDefault();
+    const textarea = event.currentTarget;
+    const { value, selectionStart: start, selectionEnd: end } = textarea;
+    if (start === end) {
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const lineEnd = value.indexOf('\n', start);
+      const actualLineEnd = lineEnd === -1 ? value.length : lineEnd;
+      const line = value.slice(lineStart, actualLineEnd);
+      if (event.shiftKey) {
+        const remove = line.startsWith('\t') ? 1 : line.startsWith('  ') ? 2 : 0;
+        if (!remove) return;
+        draft.content = value.slice(0, lineStart) + value.slice(lineStart + remove);
+        await tick();
+        textarea.setSelectionRange(Math.max(lineStart, start - remove), Math.max(lineStart, start - remove));
+      } else {
+        draft.content = value.slice(0, start) + '\t' + value.slice(start);
+        await tick();
+        textarea.setSelectionRange(start + 1, start + 1);
+      }
+    } else {
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const nextLine = value.indexOf('\n', end);
+      const lineEnd = nextLine === -1 ? value.length : nextLine;
+      const selectedLines = value.slice(lineStart, lineEnd).split('\n');
+      let removedFirst = 0;
+      let removedTotal = 0;
+      const transformed = selectedLines.map((line, index) => {
+        if (!event.shiftKey) return `\t${line}`;
+        const remove = line.startsWith('\t') ? 1 : line.startsWith('  ') ? 2 : 0;
+        if (index === 0) removedFirst = remove;
+        removedTotal += remove;
+        return line.slice(remove);
+      }).join('\n');
+      draft.content = value.slice(0, lineStart) + transformed + value.slice(lineEnd);
+      await tick();
+      const nextStart = event.shiftKey ? Math.max(lineStart, start - removedFirst) : start + 1;
+      const nextEnd = event.shiftKey ? Math.max(nextStart, end - removedTotal) : end + selectedLines.length;
+      textarea.setSelectionRange(nextStart, nextEnd);
+    }
+    if (draft.id) scheduleBlockSave(draft);
+  }
+
+  async function flushBlockSaves(ids = blocks.map((block) => block.id)) {
+    const requested = new Set(ids);
+    const pending = blocks.filter((block) => requested.has(block.id) && ['pending', 'error'].includes(blockSaveStates[block.id]));
+    pending.forEach(clearBlockSaveTimer);
+    await Promise.all(pending.map((block) => persistBlock(block)));
   }
 
   function toggleSelected(id) {
@@ -124,6 +241,7 @@
   async function copySelected(ids = selected) {
     if (!ids.length) return;
     await run(async () => {
+      await flushBlockSaves(ids);
       const result = await api('/portable-text', {
         method: 'POST', body: { block_ids: ids }, secret
       });
@@ -149,6 +267,12 @@
       await api('/blocks/reorder', { method: 'POST', body: { block_ids: ids }, secret });
       await load();
     }, '順序已更新');
+  }
+
+  function beginDrag(event, id) {
+    dragId = id;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', id);
   }
 
   async function createBundle() {
@@ -398,7 +522,7 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
 
     <section class="workspace-main">
       {#if activeTab === 'blocks'}
-        <div class="page-heading"><div><p class="eyebrow">TYPED PORTABLE ASSETS</p><h1>選一種資產開始</h1></div><p>每種型別都有預設模板與 Agent 使用規則；複製時會自動包成可直接理解的 Portable Agent Pack。</p></div>
+        <div class="page-heading"><div><p class="eyebrow">TYPED PORTABLE ASSETS</p><h1>選一種資產開始</h1></div><p>每種型別都有預設模板與 Agent 使用規則；編輯內容會自動儲存，複製時會自動包成可直接理解的 Portable Agent Pack。</p></div>
         <section class="type-catalog" aria-label="資產型別">
           {#each artifactTypes as type}
             <button type="button" class="type-card" class:active={newBlock?.block_type === type.key} on:click={() => startTypedBlock(type)}>
@@ -417,32 +541,32 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
             </div>
             <p class="agent-guidance"><strong>複製給 Agent 時：</strong>{selectedType.agent_instructions}</p>
             <input bind:value={newBlock.title} placeholder="資產標題" maxlength="100" required />
-            <textarea bind:value={newBlock.content} placeholder="輸入 Markdown 內容…" maxlength="65536" required></textarea>
+            <textarea bind:value={newBlock.content} on:keydown={(event) => handleMarkdownTab(event, newBlock)} placeholder="輸入 Markdown 內容…" maxlength="65536" required></textarea>
             <div class="form-footer"><span>{newBlock.content.length.toLocaleString()} / 65,536 bytes</span><button class="primary" disabled={busy}>建立 {selectedType.short_label}</button></div>
           </form>
         {/if}
 
         <div class="block-list">
           {#each blocks as block (block.id)}
-            <article class="block-editor" draggable="true" on:dragstart={() => dragId = block.id} on:dragover|preventDefault on:drop={() => dropBefore(block.id)}>
+            <article class="block-editor" on:dragover|preventDefault on:drop={() => dropBefore(block.id)}>
               <div class="block-toolbar">
-                <span class="drag-handle" title="拖曳排序">⠿</span>
+                <span class="drag-handle" role="button" tabindex="0" aria-label="拖曳排序" draggable="true" on:dragstart={(event) => beginDrag(event, block.id)} title="拖曳排序">⠿</span>
                 <label class="check"><input type="checkbox" checked={selected.includes(block.id)} on:change={() => toggleSelected(block.id)} /><span></span></label>
-                <select class="type-select" bind:value={block.block_type} aria-label={`${block.title} 型別`}>
+                <select class="type-select" bind:value={block.block_type} on:change={() => scheduleBlockSave(block)} aria-label={`${block.title} 型別`}>
                   {#each artifactTypes as type}<option value={type.key}>{type.short_label}</option>{/each}
                 </select>
-                <input class="block-title" bind:value={block.title} maxlength="100" aria-label="Block 標題" />
+                <input class="block-title" bind:value={block.title} on:input={() => scheduleBlockSave(block)} maxlength="100" aria-label="Block 標題" />
                 <span class="version">v{block.version}</span>
-                <button class="quiet compact" on:click={() => copySelected([block.id])}>複製給 Agent 貼上安裝</button>
-                {#if block.block_type === 'skill'}<button class="quiet compact raw-copy" on:click={() => copyRawSkill(block)}>複製 RAW Skill</button>{/if}
-                <button class="quiet compact" on:click={() => saveBlock(block)} disabled={busy}>儲存</button>
-                <button class="danger-link compact" on:click={() => removeBlock(block)}>刪除</button>
+                {#if saveStateLabel(block)}<span class="autosave-status {blockSaveStates[block.id]}">{saveStateLabel(block)}</span>{/if}
+                <button type="button" class="quiet compact" on:click|stopPropagation={() => copySelected([block.id])}>複製給 Agent 貼上安裝</button>
+                {#if block.block_type === 'skill'}<button type="button" class="quiet compact raw-copy" on:click|stopPropagation={() => copyRawSkill(block)}>複製 RAW Skill</button>{/if}
+                <button type="button" class="danger-link compact" on:click|stopPropagation={() => removeBlock(block)}>刪除</button>
               </div>
               {#if typeFor(block.block_type)}
                 <details class="type-guidance"><summary>{typeFor(block.block_type).label} · Agent 如何使用</summary><p>{typeFor(block.block_type).agent_instructions}</p></details>
               {/if}
               <div class="editor-grid">
-                <textarea bind:value={block.content} maxlength="65536" aria-label={`${block.title} Markdown`}></textarea>
+                <textarea bind:value={block.content} on:input={() => scheduleBlockSave(block)} on:keydown={(event) => handleMarkdownTab(event, block)} maxlength="65536" aria-label={`${block.title} Markdown`}></textarea>
                 <div class="preview"><span class="preview-label">安全預覽</span><Markdown content={block.content} /></div>
               </div>
             </article>
