@@ -48,6 +48,9 @@ def main():
     password = open(args.admin_password_file, encoding="utf-8").read().strip()
     client = Client(args.base_url)
 
+    _, public_config, _ = client.request("GET", "/api/v1/config")
+    assert "email_login_enabled" in public_config
+
     _, created, _ = client.request(
         "POST", "/api/v1/vaults", {"name": "CrossPrompt live acceptance"}, expected=(201,)
     )
@@ -85,6 +88,8 @@ def main():
     _, snapshot, _ = client.request("GET", "/api/v1/vault", bearer=secret)
     assert snapshot["blocks"][0]["content"] == "Verify primary sources."
     assert snapshot["blocks"][0]["block_type"] == "skill"
+    assert snapshot["vault"]["email"] is None
+    assert snapshot["vault"]["email_verified_at"] is None
     assert "expires_at" not in snapshot["vault"]
 
     _, rotated, _ = client.request("POST", "/api/v1/vault/rotate-secret", {}, bearer=secret)

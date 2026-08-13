@@ -2,6 +2,8 @@
 
 CrossPrompt 是一個無一般使用者帳號的私人 AI 資產 Homepage。使用者取得一條高熵祕密連結後，可永久保存有正式型別的 Markdown 資產、建立 Bundles，並一鍵產生附帶 Agent 使用引導的 Portable Agent Pack。AI 也能透過 HTTP API 完整維護內容，完成工作後再呼叫 callback，轉送到 Pushcut、ntfy 或通用 JSON webhook。
 
+Vault 支援兩種瀏覽器存取方式：原本的高熵管理連結，以及寄到已驗證 Email 的六位數一次性登入碼。Email 是 Vault 的選用綁定，不會取代或顯示 Vault secret。
+
 ## 型別化可攜資產
 
 建立資產時，前端會載入該型別的預設標題與 Markdown 模板。資料庫將型別保存為 `block_type`；修改內容或還原 Revision 時都會保留型別。
@@ -71,6 +73,31 @@ Production 模式缺少管理員帳號、Argon2id hash、Session secret、master
 
 Production 也會強制 `https://` public URL、Secure Cookie，以及成對且非空的 Turnstile site/secret keys。沒有正式網域、TLS 或 Turnstile keys 時請使用 `development` 或 `staging`，不要把該實例直接暴露到網際網路。
 
+## Email OTP 登入
+
+Email 功能需要 SMTP STARTTLS。設定以下環境變數後重建服務：
+
+```dotenv
+CROSSPROMPT_SMTP_HOST=smtp.example.com
+CROSSPROMPT_SMTP_PORT=587
+CROSSPROMPT_SMTP_USERNAME=your-smtp-user
+CROSSPROMPT_SMTP_PASSWORD=your-smtp-password
+CROSSPROMPT_SMTP_FROM=CrossPrompt <no-reply@example.com>
+```
+
+`HOST` 與 `FROM` 必須一起設定；SMTP 若需要認證，`USERNAME` 與 `PASSWORD` 也必須成對。未設定 SMTP 時服務仍可啟動，但前端會清楚標示 Email 登入與綁定目前不可用。
+
+安全行為：
+
+- 綁定或更換 Email 前必須先驗證該信箱收到的 OTP。
+- 每個 Email 只能綁定一個 Vault。
+- OTP 為六位數、10 分鐘有效、最多嘗試五次；新碼會使舊碼失效。
+- 寄送同時限制來源 IP 與 Email；登入碼申請不會透露 Email 是否存在。
+- OTP 與瀏覽器 Session 在 SQLite 中只保存 keyed digest，不保存明碼 token。
+- Email 登入成功後使用 30 天 `HttpOnly`、`SameSite=Strict` Cookie；production 另有 `Secure`。
+- 輪替 Vault secret 會一併使所有既有 Email Session 失效。
+- 解除 Email 綁定必須使用 Bearer secret，並立即撤銷所有 Email Session。
+
 ## 使用者資料規則
 
 - 有 Block、Bundle、通知設定，或曾真正使用過的 Vault 永不因閒置而自動過期。
@@ -89,6 +116,8 @@ OpenAPI 文件位於 `/api/v1/openapi.json`。除了建立 Vault 與 callback，
 Authorization: Bearer {vault-secret}
 Content-Type: application/json
 ```
+
+瀏覽器也可以使用 Email OTP 所建立的 HttpOnly Session 呼叫相同 Vault API；該 Cookie 不會交給 JavaScript，也不作為 AI 或外部 client 的 API credential。AI 與程式化存取仍應使用 Bearer secret。
 
 常用範例：
 

@@ -26,7 +26,7 @@
 - [x] Add secure SMTP delivery, expiry, attempt limits, and rate limits
 - [x] Allow Vault APIs to authenticate by secret link or Email session
 - [x] Add Email login, binding, unbinding, and logout interfaces
-- [ ] Add automated tests and operational documentation
+- [x] Add automated tests and operational documentation
 - [ ] Rebuild and verify the deployed staging stack
 
 ## Notes

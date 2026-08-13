@@ -240,16 +240,34 @@ mod tests {
         let vault_id = created["vault"]["id"].as_str().unwrap().to_owned();
 
         let email = "owner@example.com";
-        let challenge_id = "login-challenge-test";
-        let code = "482913";
+        let bind_challenge_id = "bind-challenge-test";
+        let bind_code = "135790";
         let now = chrono::Utc::now();
-        sqlx::query("UPDATE vaults SET email = ?, email_verified_at = ? WHERE id = ?")
+        sqlx::query("INSERT INTO email_otp_challenges (id, email, vault_id, purpose, code_digest, created_at, expires_at) VALUES (?, ?, ?, 'bind', ?, ?, ?)")
+            .bind(bind_challenge_id)
             .bind(email)
-            .bind(now.to_rfc3339())
             .bind(&vault_id)
+            .bind(security::keyed_digest("test-session-secret-that-is-long-enough", &format!("{bind_challenge_id}:{bind_code}")))
+            .bind(now.to_rfc3339())
+            .bind((now + chrono::Duration::minutes(10)).to_rfc3339())
             .execute(&pool)
             .await
             .unwrap();
+        let bind_response = app
+            .clone()
+            .oneshot(json_request(
+                "POST",
+                "/api/v1/vault/email/verify",
+                json!({"email":email,"code":bind_code}),
+                Some(&secret),
+                peer,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(bind_response.status(), StatusCode::OK);
+
+        let challenge_id = "login-challenge-test";
+        let code = "482913";
         sqlx::query("INSERT INTO email_otp_challenges (id, email, vault_id, purpose, code_digest, created_at, expires_at) VALUES (?, ?, ?, 'login', ?, ?, ?)")
             .bind(challenge_id)
             .bind(email)
@@ -383,7 +401,7 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let rotated = response_json(response).await;
-        let new_secret = rotated["secret"].as_str().unwrap();
+        let new_secret = rotated["secret"].as_str().unwrap().to_owned();
 
         let old_response = app
             .clone()
@@ -391,11 +409,37 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(old_response.status(), StatusCode::UNAUTHORIZED);
+        let old_email_session = app
+            .clone()
+            .oneshot(session_request(
+                "GET",
+                "/api/v1/vault",
+                json!({}),
+                Some(&email_cookie),
+                None,
+                peer,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(old_email_session.status(), StatusCode::UNAUTHORIZED);
+        let unbind = app
+            .clone()
+            .oneshot(json_request(
+                "DELETE",
+                "/api/v1/vault/email",
+                json!({}),
+                Some(&new_secret),
+                peer,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(unbind.status(), StatusCode::NO_CONTENT);
         let new_response = app
-            .oneshot(json_request("GET", "/api/v1/vault", json!({}), Some(new_secret), peer))
+            .oneshot(json_request("GET", "/api/v1/vault", json!({}), Some(&new_secret), peer))
             .await
             .unwrap();
         assert_eq!(new_response.status(), StatusCode::OK);
+        assert!(response_json(new_response).await["vault"]["email"].is_null());
 
         pool.close().await;
         for suffix in ["", "-wal", "-shm"] {
