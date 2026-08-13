@@ -1,6 +1,10 @@
 <script>
   import { onMount } from 'svelte';
   import { ApiError, api } from '../lib/api.js';
+  import LanguageSwitcher from './LanguageSwitcher.svelte';
+  import { locale, t } from '../lib/i18n.js';
+
+  $: activeLocale = $locale;
 
   let authenticated = false;
   let login = { username: '', password: '' };
@@ -134,24 +138,24 @@
 
 <header class="site-header admin-header">
   <a class="brand" href="/"><span class="brand-mark">C</span>CrossPrompt <small>ADMIN</small></a>
-  {#if authenticated}<div class="header-actions"><button class:active={view === 'vaults'} class="quiet" on:click={() => view = 'vaults'}>Vaults</button><button class:active={view === 'audit'} class="quiet" on:click={showAudit}>Audit log</button><button class="quiet" on:click={signOut}>登出</button></div>{/if}
+  <div class="header-actions"><LanguageSwitcher />{#if authenticated}<button class:active={view === 'vaults'} class="quiet" on:click={() => view = 'vaults'}>Vaults</button><button class:active={view === 'audit'} class="quiet" on:click={showAudit}>{t('auditLog')}</button><button class="quiet" on:click={signOut}>{t('signOut')}</button>{/if}</div>
 </header>
 
 {#if error}<div class="floating-message error-banner" role="alert">{error}</div>{/if}
 {#if notice}<div class="floating-message success-banner">{notice}</div>{/if}
 
 {#if !authenticated}
-  <main class="login-page shell">
+  <main class="login-page shell" data-locale={activeLocale}>
     <form class="login-panel" on:submit|preventDefault={signIn}>
-      <p class="eyebrow">RESTRICTED OPERATIONS</p><h1>管理員登入</h1>
-      <p>單一管理員後台。Session 有效 12 小時，mutation 受 CSRF 保護。</p>
-      <label>帳號<input bind:value={login.username} autocomplete="username" required /></label>
-      <label>密碼<input type="password" bind:value={login.password} autocomplete="current-password" required /></label>
-      <button class="primary large" disabled={busy}>{busy ? '驗證中…' : '登入'}</button>
+      <p class="eyebrow">RESTRICTED OPERATIONS</p><h1>{t('adminLogin')}</h1>
+      <p>{t('adminLoginText')}</p>
+      <label>{t('username')}<input bind:value={login.username} autocomplete="username" required /></label>
+      <label>{t('password')}<input type="password" bind:value={login.password} autocomplete="current-password" required /></label>
+      <button class="primary large" disabled={busy}>{busy ? t('verifying') : t('login')}</button>
     </form>
   </main>
 {:else}
-  <main class="admin-main shell-wide">
+  <main class="admin-main shell-wide" data-locale={activeLocale}>
     {#if overview}
       <section class="metric-grid">
         <article><span>Vaults</span><strong>{overview.vaults.total}</strong><small>{overview.vaults.active} active · {overview.vaults.suspended} suspended</small></article>
@@ -165,23 +169,23 @@
 
     {#if view === 'vaults'}
       <section class="admin-section">
-        <div class="page-heading"><div><p class="eyebrow">OPERATIONS</p><h1>Vault 管理</h1></div><p>管理員能查看但不能修改使用者內容，也無法取得或復原 secret。</p></div>
+        <div class="page-heading"><div><p class="eyebrow">{t('operations')}</p><h1>{t('vaultManagement')}</h1></div><p>{t('adminReadOnly')}</p></div>
         <form class="filters" on:submit|preventDefault={applyFilters}>
-          <input bind:value={filters.q} placeholder="搜尋 Vault ID 或名稱" />
-          <select bind:value={filters.status}><option value="">全部狀態</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="deleted">Deleted</option><option value="empty">Never used</option></select>
-          <select bind:value={filters.sort}><option value="updated_desc">最近修改</option><option value="updated_asc">最早修改</option><option value="created_asc">最早建立</option><option value="size_desc">容量最大</option></select>
-          <button class="primary">查詢</button>
+          <input bind:value={filters.q} placeholder={t('searchVault')} />
+          <select bind:value={filters.status}><option value="">{t('allStatuses')}</option><option value="active">Active</option><option value="suspended">Suspended</option><option value="deleted">Deleted</option><option value="empty">Never used</option></select>
+          <select bind:value={filters.sort}><option value="updated_desc">{t('recentlyUpdated')}</option><option value="updated_asc">{t('oldestUpdated')}</option><option value="created_asc">{t('oldestCreated')}</option><option value="size_desc">{t('largest')}</option></select>
+          <button class="primary">{t('query')}</button>
         </form>
         <div class="table-wrap"><table><thead><tr><th>Vault</th><th>狀態</th><th>Objects</th><th>容量</th><th>最後修改</th><th></th></tr></thead><tbody>
           {#each vaults as vault}
-            <tr><td><strong>{vault.name}</strong><code>{vault.id}</code></td><td><span class="status-pill {vault.status}">{vault.status}</span>{#if !vault.ever_used}<small>never used</small>{/if}</td><td>{vault.block_count} / {vault.bundle_count} / {vault.revision_count}</td><td>{bytes(vault.content_bytes)}</td><td>{new Date(vault.updated_at).toLocaleString()}</td><td><button class="quiet compact" on:click={() => openVault(vault.id)}>查看</button></td></tr>
-          {:else}<tr><td colspan="6">沒有符合條件的 Vault</td></tr>{/each}
+            <tr><td><strong>{vault.name}</strong><code>{vault.id}</code></td><td><span class="status-pill {vault.status}">{vault.status}</span>{#if !vault.ever_used}<small>never used</small>{/if}</td><td>{vault.block_count} / {vault.bundle_count} / {vault.revision_count}</td><td>{bytes(vault.content_bytes)}</td><td>{new Date(vault.updated_at).toLocaleString()}</td><td><button class="quiet compact" on:click={() => openVault(vault.id)}>{t('view')}</button></td></tr>
+          {:else}<tr><td colspan="6">{t('noVaults')}</td></tr>{/each}
         </tbody></table></div>
-        <div class="pager"><button class="quiet" disabled={filters.page <= 1} on:click={async () => { filters.page -= 1; await loadVaults(); }}>上一頁</button><span>第 {filters.page} 頁</span><button class="quiet" disabled={vaults.length < 50} on:click={async () => { filters.page += 1; await loadVaults(); }}>下一頁</button></div>
+        <div class="pager"><button class="quiet" disabled={filters.page <= 1} on:click={async () => { filters.page -= 1; await loadVaults(); }}>{t('previous')}</button><span>{t('page', { page: filters.page })}</span><button class="quiet" disabled={vaults.length < 50} on:click={async () => { filters.page += 1; await loadVaults(); }}>{t('next')}</button></div>
       </section>
     {:else}
       <section class="admin-section">
-        <div class="page-heading"><div><p class="eyebrow">IMMUTABLE FROM UI</p><h1>管理稽核紀錄</h1></div><button class="quiet" on:click={showAudit}>重新整理</button></div>
+        <div class="page-heading"><div><p class="eyebrow">{t('immutable')}</p><h1>{t('auditTitle')}</h1></div><button class="quiet" on:click={showAudit}>{t('refresh')}</button></div>
         <div class="table-wrap"><table><thead><tr><th>時間</th><th>操作</th><th>Vault ID</th><th>原因</th><th>管理員 IP hash</th></tr></thead><tbody>
           {#each audit as item}<tr><td>{new Date(item.created_at).toLocaleString()}</td><td><span class="status-pill">{item.action}</span></td><td><code>{item.vault_id || '—'}</code></td><td>{item.reason || '—'}</td><td><code>{item.ip_hash.slice(0, 16)}…</code></td></tr>{/each}
         </tbody></table></div>
@@ -192,21 +196,21 @@
 
 {#if detail}
   <div class="modal-backdrop" role="presentation" on:click={(event) => event.currentTarget === event.target && (detail = null)}>
-    <div class="admin-detail" role="dialog" aria-modal="true" aria-label="Vault 詳情" tabindex="-1">
-      <div class="detail-header"><div><span class="status-pill {detail.vault.status}">{detail.vault.status}</span><h2>{detail.vault.name}</h2><code>{detail.vault.id}</code></div><button class="quiet" on:click={() => detail = null}>關閉</button></div>
-      <dl class="detail-meta"><div><dt>建立</dt><dd>{new Date(detail.vault.created_at).toLocaleString()}</dd></div><div><dt>修改</dt><dd>{new Date(detail.vault.updated_at).toLocaleString()}</dd></div><div><dt>Email</dt><dd>{detail.vault.email || '未綁定'}</dd></div><div><dt>通知</dt><dd>{detail.notification_target?.masked_url || '未設定'}</dd></div><div><dt>Objects</dt><dd>{detail.blocks.length} / {detail.bundles.length} / {detail.revisions.length}</dd></div></dl>
+    <div class="admin-detail" role="dialog" aria-modal="true" aria-label={t('detail')} tabindex="-1">
+      <div class="detail-header"><div><span class="status-pill {detail.vault.status}">{detail.vault.status}</span><h2>{detail.vault.name}</h2><code>{detail.vault.id}</code></div><button class="quiet" on:click={() => detail = null}>{t('close')}</button></div>
+      <dl class="detail-meta"><div><dt>{t('created')}</dt><dd>{new Date(detail.vault.created_at).toLocaleString()}</dd></div><div><dt>{t('modified')}</dt><dd>{new Date(detail.vault.updated_at).toLocaleString()}</dd></div><div><dt>Email</dt><dd>{detail.vault.email || t('unbound')}</dd></div><div><dt>Notify</dt><dd>{detail.notification_target?.masked_url || t('unset')}</dd></div><div><dt>{t('objects')}</dt><dd>{detail.blocks.length} / {detail.bundles.length} / {detail.revisions.length}</dd></div></dl>
       <div class="admin-actions">
-        {#if detail.vault.status === 'active'}<button class="warning" on:click={() => action(detail.vault.id, 'suspend')}>Suspend</button>{/if}
-        {#if detail.vault.status === 'suspended'}<button class="primary" on:click={() => action(detail.vault.id, 'resume')}>Resume</button>{/if}
-        {#if detail.vault.status !== 'deleted'}<button class="danger" on:click={() => action(detail.vault.id, 'delete')}>Soft delete</button>{/if}
-        {#if detail.vault.status === 'deleted'}<button class="primary" on:click={() => action(detail.vault.id, 'restore')}>Restore</button>{/if}
-        <button class="danger" on:click={() => action(detail.vault.id, 'permanent')}>Permanent delete</button>
+        {#if detail.vault.status === 'active'}<button class="warning" on:click={() => action(detail.vault.id, 'suspend')}>{t('suspend')}</button>{/if}
+        {#if detail.vault.status === 'suspended'}<button class="primary" on:click={() => action(detail.vault.id, 'resume')}>{t('resume')}</button>{/if}
+        {#if detail.vault.status !== 'deleted'}<button class="danger" on:click={() => action(detail.vault.id, 'delete')}>{t('softDelete')}</button>{/if}
+        {#if detail.vault.status === 'deleted'}<button class="primary" on:click={() => action(detail.vault.id, 'restore')}>{t('restore')}</button>{/if}
+        <button class="danger" on:click={() => action(detail.vault.id, 'permanent')}>{t('permanentDelete')}</button>
       </div>
-      <h3>完整型別化資產</h3>
-      {#each detail.blocks as block}<article class="content-inspection"><div><strong><span class="inline-type">{block.block_type || 'prompt'}</span>{block.title}</strong><span>v{block.version} · position {block.position}</span></div><pre>{block.content}</pre></article>{:else}<p class="muted">沒有資產</p>{/each}
+      <h3>{t('typedAssets')}</h3>
+      {#each detail.blocks as block}<article class="content-inspection"><div><strong><span class="inline-type">{block.block_type || 'prompt'}</span>{block.title}</strong><span>v{block.version} · position {block.position}</span></div><pre>{block.content}</pre></article>{:else}<p class="muted">{t('noAssets')}</p>{/each}
       <h3>Bundles</h3>
-      {#each detail.bundles as bundle}<article class="content-inspection"><strong>{bundle.name}</strong><pre>{JSON.stringify(bundle.block_ids, null, 2)}</pre></article>{:else}<p class="muted">沒有 Bundle</p>{/each}
-      <h3>最近版本來源</h3>
+      {#each detail.bundles as bundle}<article class="content-inspection"><strong>{bundle.name}</strong><pre>{JSON.stringify(bundle.block_ids, null, 2)}</pre></article>{:else}<p class="muted">{t('noBundles')}</p>{/each}
+      <h3>{t('recentSources')}</h3>
       <div class="history-list compact-list">{#each detail.revisions as revision}<article><div><strong>{revision.action} {revision.resource_type}</strong><code>{revision.resource_id || 'vault'}</code></div><span>{revision.source} · {new Date(revision.created_at).toLocaleString()}</span></article>{/each}</div>
     </div>
   </div>
