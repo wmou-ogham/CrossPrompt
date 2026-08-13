@@ -61,6 +61,13 @@
 - [x] Rebuild and verify the multilingual frontend
 - [x] Push the signed i18n commits
 
+## Raw copy and Markdown list indentation
+
+- [x] Add RAW text copy actions for selected Assets, individual Assets, and Bundles
+- [x] Keep RAW copies to the original Markdown content without Agent installation instructions
+- [x] Make Tab and Shift+Tab indent or unindent Markdown list items like a code editor
+- [x] Rebuild and verify the updated frontend
+
 ## Notes
 
 - Project host: `moriss@10.121.180.185`

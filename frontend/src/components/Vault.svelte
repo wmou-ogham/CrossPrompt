@@ -33,7 +33,6 @@
   $: blocks = snapshot?.blocks || [];
   $: bundles = snapshot?.bundles || [];
   $: selectedBlocks = blocks.filter((block) => selected.includes(block.id));
-  $: selectedRawSkill = selectedBlocks.length === 1 && selectedBlocks[0].block_type === 'skill' ? selectedBlocks[0] : null;
   $: selectedType = newBlock ? typeFor(newBlock.block_type) : null;
 
   onMount(load);
@@ -199,40 +198,54 @@
     event.preventDefault();
     const textarea = event.currentTarget;
     const { value, selectionStart: start, selectionEnd: end } = textarea;
-    if (start === end) {
-      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-      const lineEnd = value.indexOf('\n', start);
-      const actualLineEnd = lineEnd === -1 ? value.length : lineEnd;
-      const line = value.slice(lineStart, actualLineEnd);
+    const indent = '  ';
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    const lineEndAtCursor = value.indexOf('\n', start);
+    const lineEnd = lineEndAtCursor === -1 ? value.length : lineEndAtCursor;
+    const currentLine = value.slice(lineStart, lineEnd);
+    const isListItem = (line) => /^\s*(?:[-*+]\s|\d+[.)]\s|[-*+]$|\d+[.)]$)/.test(line);
+
+    if (start === end && isListItem(currentLine)) {
       if (event.shiftKey) {
-        const remove = line.startsWith('\t') ? 1 : line.startsWith('  ') ? 2 : 0;
+        const remove = currentLine.startsWith('\t') ? 1 : currentLine.startsWith(indent) ? indent.length : 0;
         if (!remove) return;
         draft.content = value.slice(0, lineStart) + value.slice(lineStart + remove);
         await tick();
         textarea.setSelectionRange(Math.max(lineStart, start - remove), Math.max(lineStart, start - remove));
       } else {
-        draft.content = value.slice(0, start) + '\t' + value.slice(start);
+        draft.content = value.slice(0, lineStart) + indent + value.slice(lineStart);
         await tick();
-        textarea.setSelectionRange(start + 1, start + 1);
+        textarea.setSelectionRange(start + indent.length, start + indent.length);
+      }
+    } else if (start === end) {
+      if (event.shiftKey) {
+        const remove = currentLine.startsWith('\t') ? 1 : currentLine.startsWith(indent) ? indent.length : 0;
+        if (!remove) return;
+        draft.content = value.slice(0, lineStart) + value.slice(lineStart + remove);
+        await tick();
+        textarea.setSelectionRange(Math.max(lineStart, start - remove), Math.max(lineStart, start - remove));
+      } else {
+        draft.content = value.slice(0, start) + indent + value.slice(start);
+        await tick();
+        textarea.setSelectionRange(start + indent.length, start + indent.length);
       }
     } else {
-      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
       const nextLine = value.indexOf('\n', end);
-      const lineEnd = nextLine === -1 ? value.length : nextLine;
-      const selectedLines = value.slice(lineStart, lineEnd).split('\n');
+      const selectionEndLine = nextLine === -1 ? value.length : nextLine;
+      const selectedLines = value.slice(lineStart, selectionEndLine).split('\n');
       let removedFirst = 0;
       let removedTotal = 0;
       const transformed = selectedLines.map((line, index) => {
-        if (!event.shiftKey) return `\t${line}`;
-        const remove = line.startsWith('\t') ? 1 : line.startsWith('  ') ? 2 : 0;
+        if (!event.shiftKey) return `${indent}${line}`;
+        const remove = line.startsWith('\t') ? 1 : line.startsWith(indent) ? indent.length : 0;
         if (index === 0) removedFirst = remove;
         removedTotal += remove;
         return line.slice(remove);
       }).join('\n');
-      draft.content = value.slice(0, lineStart) + transformed + value.slice(lineEnd);
+      draft.content = value.slice(0, lineStart) + transformed + value.slice(selectionEndLine);
       await tick();
-      const nextStart = event.shiftKey ? Math.max(lineStart, start - removedFirst) : start + 1;
-      const nextEnd = event.shiftKey ? Math.max(nextStart, end - removedTotal) : end + selectedLines.length;
+      const nextStart = event.shiftKey ? Math.max(lineStart, start - removedFirst) : start + indent.length;
+      const nextEnd = event.shiftKey ? Math.max(nextStart, end - removedTotal) : end + (selectedLines.length * indent.length);
       textarea.setSelectionRange(nextStart, nextEnd);
     }
     if (draft.id) scheduleBlockSave(draft);
@@ -264,11 +277,14 @@
     }, `已複製 ${ids.length} 個可安裝資產`);
   }
 
-  async function copyRawSkill(block) {
-    if (!block || block.block_type !== 'skill') return;
+  async function copyRawText(blocksToCopy) {
+    const rawBlocks = Array.isArray(blocksToCopy) ? blocksToCopy : [blocksToCopy];
+    if (!rawBlocks.length) return;
     await run(async () => {
-      await copyText(block.content);
-    }, '已複製 RAW Skill 內容');
+      await flushBlockSaves(rawBlocks.map((block) => block.id));
+      const text = rawBlocks.map((block) => block.content).join('\n\n---\n\n');
+      await copyText(text);
+    }, t('copyRawText'));
   }
 
   async function dropBefore(targetId) {
@@ -531,7 +547,7 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
         <span>{t('selected', { count: selected.length })}</span>
         <div class="selection-actions">
           <button class="primary compact" disabled={!selected.length || busy} on:click={() => copySelected()}>{t('copyInstall')}</button>
-          {#if selectedRawSkill}<button class="quiet compact" disabled={busy} on:click={() => copyRawSkill(selectedRawSkill)}>{t('rawSkill')}</button>{/if}
+          <button class="quiet compact" disabled={!selected.length || busy} on:click={() => copyRawText(selectedBlocks)}>{t('copyRawText')}</button>
         </div>
       </div>
     </aside>
@@ -575,7 +591,7 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
                 <span class="version">v{block.version}</span>
                 {#if saveStateLabel(block)}<span class="autosave-status {blockSaveStates[block.id]}">{saveStateLabel(block)}</span>{/if}
                 <button type="button" class="quiet compact" on:click|stopPropagation={() => copySelected([block.id])}>{t('copyInstall')}</button>
-                {#if block.block_type === 'skill'}<button type="button" class="quiet compact raw-copy" on:click|stopPropagation={() => copyRawSkill(block)}>{t('rawSkill')}</button>{/if}
+                <button type="button" class="quiet compact raw-copy" on:click|stopPropagation={() => copyRawText(block)}>{t('copyRawText')}</button>
                 <button type="button" class="danger-link compact" on:click|stopPropagation={() => removeBlock(block)}>{t('delete')}</button>
               </div>
               {#if typeFor(block.block_type)}
@@ -606,6 +622,7 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
               <ol>{#each bundle.block_ids as id}<li><span class="inline-type">{typeFor(blocks.find((block) => block.id === id)?.block_type)?.short_label || 'Unknown'}</span>{blocks.find((block) => block.id === id)?.title || '已移除的資產'}</li>{/each}</ol>
               <div class="button-row">
                 <button class="primary compact" on:click={() => copySelected(bundle.block_ids)}>{t('copyInstall')}</button>
+                <button class="quiet compact" on:click={() => copyRawText(bundle.block_ids.map((id) => blocks.find((block) => block.id === id)).filter(Boolean))}>{t('copyRawText')}</button>
                 <button class="quiet compact" on:click={() => selected = [...bundle.block_ids]}>{t('loadSelection')}</button>
                 <button class="quiet compact" on:click={() => updateBundle(bundle)} disabled={!selected.length}>{t('updateSelection')}</button>
                 <button class="danger-link compact" on:click={() => removeBundle(bundle)}>{t('delete')}</button>
