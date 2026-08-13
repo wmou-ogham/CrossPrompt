@@ -24,6 +24,7 @@
   let emailBinding = { email: '', code: '', step: 'request' };
   let blockSaveStates = {};
   const blockSaveTimers = new Map();
+  const blockSavePromises = new Map();
 
   $: blocks = snapshot?.blocks || [];
   $: bundles = snapshot?.bundles || [];
@@ -113,8 +114,16 @@
     setBlockSaveState(block.id, 'pending');
     blockSaveTimers.set(block.id, window.setTimeout(() => {
       blockSaveTimers.delete(block.id);
-      persistBlock(block);
+      startBlockSave(block);
     }, 700));
+  }
+
+  function startBlockSave(block) {
+    const promise = persistBlock(block).finally(() => {
+      if (blockSavePromises.get(block.id) === promise) blockSavePromises.delete(block.id);
+    });
+    blockSavePromises.set(block.id, promise);
+    return promise;
   }
 
   async function persistBlock(block) {
@@ -229,7 +238,9 @@
     const requested = new Set(ids);
     const pending = blocks.filter((block) => requested.has(block.id) && ['pending', 'error'].includes(blockSaveStates[block.id]));
     pending.forEach(clearBlockSaveTimer);
-    await Promise.all(pending.map((block) => persistBlock(block)));
+    const inFlight = ids.map((id) => blockSavePromises.get(id)).filter(Boolean);
+    const queued = pending.map((block) => startBlockSave(block));
+    await Promise.all([...new Set([...inFlight, ...queued])]);
   }
 
   function toggleSelected(id) {
