@@ -80,3 +80,32 @@
 - Project host: `moriss@10.121.180.185`
 - Project directory: `/home/moriss/cross-prompt`
 - Any privileged command must be appended to `sudo.log` before execution. No `sudo` command has been used.
+
+## Google SSO
+
+- [x] Add optional `CROSSPROMPT_GOOGLE_CLIENT_ID` / `SECRET` config
+- [x] Leave `.env.example` and `google-oauth.env.example` for the operator to fill
+- [x] Implement OAuth start (login GET / bind POST) and callback
+- [x] Reuse Email Vault session cookies after Google verification
+- [x] Expose `google_login_enabled` on `/api/v1/config`
+- [x] Landing Google tab + Vault bind/rebind UI + i18n
+- [x] Document redirect URI and security notes in README
+- [x] Operator filled Google Cloud OAuth credentials; copied into `.env`
+- [x] Redeployed to https://crossprompt.mou.tw with `google_login_enabled: true`
+- [x] Google login find-or-create: first sign-in auto-creates Vault (no prior bind required)
+- [ ] Live acceptance against a real Google account (retry after auto-create deploy)
+
+## Skill header preview
+
+- [x] Parse SKILL.md YAML frontmatter (`---` / `name` / `description` / block scalars)
+- [x] Render it as a Skill 標頭 card instead of a markdown-it setext H2
+- [x] Keep Markdown body preview after the header
+- [x] Add the standard header to the default Skill template
+- [x] Cover parser behavior with `frontend` `node --test`
+- [ ] Live Vault UI check after the staging stack is rebuilt
+
+## Landing privacy copy
+
+- [x] Remove the non-E2E / admin-can-view-content warning from the landing page
+- [x] Drop unused `privacyWarning` / `privacyText` i18n keys in all locales
+- [ ] Browser-check the landing privacy strip after the frontend rebuild (source verified; live stack still building an earlier image)

@@ -23,6 +23,7 @@ pub struct Config {
     pub cookie_secure: bool,
     pub trust_proxy: bool,
     pub smtp: Option<SmtpConfig>,
+    pub google_oauth: Option<GoogleOAuthConfig>,
 }
 
 #[derive(Clone, Debug)]
@@ -32,6 +33,12 @@ pub struct SmtpConfig {
     pub username: Option<String>,
     pub password: Option<String>,
     pub from: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct GoogleOAuthConfig {
+    pub client_id: String,
+    pub client_secret: String,
 }
 
 impl Config {
@@ -80,6 +87,17 @@ impl Config {
                 })
             })
             .transpose()?;
+        let google_client_id = optional_value("CROSSPROMPT_GOOGLE_CLIENT_ID");
+        let google_client_secret = optional_value("CROSSPROMPT_GOOGLE_CLIENT_SECRET");
+        if google_client_id.is_some() != google_client_secret.is_some() {
+            bail!("CROSSPROMPT_GOOGLE_CLIENT_ID and CROSSPROMPT_GOOGLE_CLIENT_SECRET must be configured together");
+        }
+        let google_oauth = google_client_id
+            .zip(google_client_secret)
+            .map(|(client_id, client_secret)| GoogleOAuthConfig {
+                client_id,
+                client_secret,
+            });
         let master_key = match env::var("CROSSPROMPT_MASTER_KEY") {
             Ok(raw) => decode_master_key(&raw)?,
             Err(_) if !production => {
@@ -145,7 +163,12 @@ impl Config {
             cookie_secure,
             trust_proxy: bool_value("CROSSPROMPT_TRUST_PROXY", false),
             smtp,
+            google_oauth,
         })
+    }
+
+    pub fn google_redirect_uri(&self) -> String {
+        format!("{}/api/v1/auth/google/callback", self.public_base_url)
     }
 }
 

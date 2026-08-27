@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 pub async fn document() -> Json<Value> {
     Json(json!({
       "openapi": "3.1.0",
-      "info": { "title": "CrossPrompt API", "version": "0.3.0", "description": "Manage a typed portable asset Vault using a secret link or verified Email OTP session." },
+      "info": { "title": "CrossPrompt API", "version": "0.3.0", "description": "Manage a typed portable asset Vault using a secret link, verified Email OTP session, or Google SSO." },
       "servers": [{ "url": "/api/v1" }],
       "components": {
         "securitySchemes": { "vaultSecret": { "type": "http", "scheme": "bearer" } },
@@ -23,6 +23,11 @@ pub async fn document() -> Json<Value> {
         "/email/login/request-code": { "post": { "security": [], "summary": "Request a login code without revealing whether the Email exists" } },
         "/email/login/verify": { "post": { "security": [], "summary": "Verify a six-digit code and create a 30-day HttpOnly Vault session" } },
         "/email/session": { "delete": { "security": [], "summary": "Log out the current Email Vault session" } },
+        "/auth/google/start": {
+          "get": { "security": [], "summary": "Redirect to Google OAuth; creates a Vault on first sign-in or opens the Vault bound to that verified Google email" },
+          "post": { "summary": "Start Google OAuth to bind or replace the current Vault Email; returns redirect_url with a signed OAuth state" }
+        },
+        "/auth/google/callback": { "get": { "security": [], "summary": "Complete Google OAuth; creates a Vault on first sign-in if needed, then creates an Email Vault session" } },
         "/vault/email/request-code": { "post": { "summary": "Send a verification code before binding an Email" } },
         "/vault/email/verify": { "post": { "summary": "Verify and bind one unique Email to the current Vault" } },
         "/vault/email": { "delete": { "summary": "Unbind Email; requires Bearer secret authentication" } },

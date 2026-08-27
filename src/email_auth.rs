@@ -83,23 +83,12 @@ pub async fn verify_login_code(
     }
     let vault_id = consume_code(&state, &email, &input.code, "login", None).await?;
     let vault_id = vault_id.ok_or(AppError::Unauthorized)?;
-    let token = new_secret();
-    let now = Utc::now();
-    sqlx::query(
-        "INSERT INTO vault_email_sessions (token_digest, vault_id, email, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(keyed_digest(&state.config.session_secret, &token))
-    .bind(&vault_id)
-    .bind(&email)
-    .bind(now.to_rfc3339())
-    .bind((now + ChronoDuration::days(EMAIL_SESSION_DAYS)).to_rfc3339())
-    .execute(&state.pool)
-    .await?;
-
+    let (token, set_cookie) = issue_email_session(&state, &vault_id, &email).await?;
+    let _ = token;
     let mut response = Json(json!({ "authenticated": true, "vault_id": vault_id })).into_response();
     response.headers_mut().insert(
         header::SET_COOKIE,
-        HeaderValue::from_str(&email_cookie(&state, &token)).map_err(anyhow::Error::from)?,
+        HeaderValue::from_str(&set_cookie).map_err(anyhow::Error::from)?,
     );
     Ok(response)
 }
@@ -329,7 +318,27 @@ async fn send_code(state: &AppState, email: &str, code: &str, purpose: &str) -> 
     Ok(())
 }
 
-fn normalize_email(raw: &str) -> AppResult<String> {
+pub(crate) async fn issue_email_session(
+    state: &AppState,
+    vault_id: &str,
+    email: &str,
+) -> AppResult<(String, String)> {
+    let token = new_secret();
+    let now = Utc::now();
+    sqlx::query(
+        "INSERT INTO vault_email_sessions (token_digest, vault_id, email, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(keyed_digest(&state.config.session_secret, &token))
+    .bind(vault_id)
+    .bind(email)
+    .bind(now.to_rfc3339())
+    .bind((now + ChronoDuration::days(EMAIL_SESSION_DAYS)).to_rfc3339())
+    .execute(&state.pool)
+    .await?;
+    Ok((token.clone(), email_cookie(state, &token)))
+}
+
+pub(crate) fn normalize_email(raw: &str) -> AppResult<String> {
     let email = raw.trim().to_lowercase();
     if email.len() > 254 || email.starts_with('.') || email.ends_with('.') {
         return Err(AppError::bad("invalid email address"));

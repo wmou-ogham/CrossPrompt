@@ -12,7 +12,7 @@
 
   let snapshot = null;
   let artifactTypes = [];
-  let siteConfig = { email_login_enabled: false };
+  let siteConfig = { email_login_enabled: false, google_login_enabled: false };
   let revisions = [];
   let selected = [];
   let activeTab = 'blocks';
@@ -505,6 +505,14 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
       window.location.replace('/');
     }, '已登出');
   }
+
+  async function bindWithGoogle() {
+    await run(async () => {
+      const result = await api('/auth/google/start', { method: 'POST', secret: secret || undefined });
+      if (!result?.redirect_url) throw new Error(t('googleSsoError'));
+      window.location.assign(result.redirect_url);
+    });
+  }
 </script>
 
 <svelte:head><title>{snapshot?.vault?.name || 'Vault'} — CrossPrompt</title></svelte:head>
@@ -659,7 +667,7 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
         <div class="settings-grid">
           <article class="email-access-card">
             <span class="eyebrow">{t('emailAccess')}</span><h3>{t('bindEmail')}</h3>
-            {#if snapshot.vault.email}<p>目前已綁定 <strong>{snapshot.vault.email}</strong>。可用一次性驗證碼登入這個 Vault。</p>{:else}<p>驗證信箱所有權後，即可用 Email 收取一次性登入碼。</p>{/if}
+            {#if snapshot.vault.email}<p>{t('emailBoundPrefix')} <strong>{snapshot.vault.email}</strong>。{t('emailBoundSuffix')}</p>{:else}<p>{t('emailUnboundHint')}</p>{/if}
             {#if siteConfig.email_login_enabled}
               <label>Email<input type="email" bind:value={emailBinding.email} maxlength="254" required disabled={emailBinding.step === 'verify'} /></label>
               {#if emailBinding.step === 'verify'}
@@ -668,7 +676,13 @@ status 只能是 completed、needs_input 或 failed。完整規格：${root}/ope
               {:else}
                 <div class="button-row"><button class="primary" disabled={busy || !emailBinding.email} on:click={requestBindCode}>{snapshot.vault.email ? t('changeEmail') : t('sendBindCode')}</button>{#if snapshot.vault.email && secret}<button class="danger-link" on:click={unbindEmail}>{t('unbind')}</button>{/if}</div>
               {/if}
-            {:else}<p class="fine-print">管理員尚未設定 SMTP，Email 綁定與登入目前不可用。</p>{/if}
+            {:else}<p class="fine-print">{t('emailSmtpDisabled')}</p>{/if}
+            {#if siteConfig.google_login_enabled}
+              <div class="button-row google-bind-row">
+                <button class="quiet" type="button" disabled={busy} on:click={bindWithGoogle}>{snapshot.vault.email ? t('googleRebind') : t('googleBind')}</button>
+              </div>
+              <p class="fine-print">{t('googleBindHint')}</p>
+            {/if}
           </article>
           {#if secret}<article><h3>{t('aiGuide')}</h3><p>包含 Base URL、Bearer secret、CRUD、版本與 callback 範例。請只貼給你信任的 AI 工作階段。</p><button class="primary" on:click={copyAiGuide}>{t('copyFullGuide')}</button></article>{/if}
           <article><h3>{t('fullExport')}</h3><p>下載目前 Vault snapshot，包含 Blocks、Bundles 與遮罩後的通知 metadata；不含原始通知 credential。</p><button class="quiet" on:click={() => downloadJson(`crossprompt-${snapshot.vault.id}.json`, snapshot)}>{t('downloadJson')}</button></article>

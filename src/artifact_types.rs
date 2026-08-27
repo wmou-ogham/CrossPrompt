@@ -82,7 +82,13 @@ pub const TYPES: &[ArtifactType] = &[
         short_label: "Skill",
         description: "定義 Agent 何時啟用及如何執行一套可重複能力。",
         default_title: "Agent Skill",
-        template: r#"# Skill 名稱
+        template: r#"---
+name: skill-name
+description: >
+  描述這個 Skill 做什麼，以及何時應該（或不應）啟用。請用第三人稱撰寫，並包含觸發關鍵字。
+---
+
+# Skill 名稱
 
 ## 何時使用
 
@@ -490,10 +496,10 @@ mod tests {
             assert!(!item.template.trim().is_empty());
             assert!(!item.agent_instructions.trim().is_empty());
         }
-        assert!(find("skill")
-            .unwrap()
-            .agent_instructions
-            .contains("Skill 目錄"));
+        let skill = find("skill").unwrap();
+        assert!(skill.agent_instructions.contains("Skill 目錄"));
+        assert!(skill.template.starts_with("---\nname: skill-name\n"));
+        assert!(skill.template.contains("description:"));
         assert!(find("mcp_server")
             .unwrap()
             .agent_instructions

@@ -6,7 +6,7 @@
 
   $: activeLocale = $locale;
 
-  let config = { turnstile_required: false, turnstile_site_key: null, email_login_enabled: false };
+  let config = { turnstile_required: false, turnstile_site_key: null, email_login_enabled: false, google_login_enabled: false };
   let mode = 'create';
   let name = 'My CrossPrompt';
   let vaultAccess = '';
@@ -22,6 +22,11 @@
   onMount(() => {
     const handleLocaleChange = (event) => activeLocale = event.detail;
     window.addEventListener('crossprompt:locale', handleLocaleChange);
+    if (window.location.hash.includes('google_sso=error')) {
+      error = t('googleSsoError');
+      mode = 'google';
+      history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/`);
+    }
     return () => window.removeEventListener('crossprompt:locale', handleLocaleChange);
   });
 
@@ -135,6 +140,7 @@
         <button type="button" class:active={mode === 'create'} on:click={() => mode = 'create'}>{t('create')}</button>
         <button type="button" class:active={mode === 'vault'} on:click={() => mode = 'vault'}>{t('vaultLink')}</button>
         <button type="button" class:active={mode === 'email'} on:click={() => mode = 'email'}>{t('emailOtp')}</button>
+        <button type="button" class:active={mode === 'google'} on:click={() => mode = 'google'}>{t('googleSso')}</button>
       </div>
 
       {#if mode === 'create'}
@@ -154,7 +160,7 @@
           <button class="primary large">{t('openVault')}</button>
           <p class="fine-print">{t('vaultSecurity')}</p>
         </form>
-      {:else}
+      {:else if mode === 'email'}
         <form class="access-form" on:submit|preventDefault={emailStep === 'request' ? requestEmailCode : verifyEmailCode}>
           <div><span class="step-label">{t('emailMethod')}</span><h2>{emailStep === 'request' ? t('sendCode') : t('enterCode')}</h2></div>
           <label>{t('email')}<input type="email" bind:value={email} maxlength="254" autocomplete="email" required disabled={emailStep === 'verify'} /></label>
@@ -167,6 +173,17 @@
           {#if emailStep === 'verify'}<button type="button" class="panel-link" on:click={() => { emailStep = 'request'; code = ''; notice = ''; }}>{t('changeEmail')}</button>{/if}
           <p class="fine-print">{config.email_login_enabled ? t('emailEnabled') : t('emailDisabled')}</p>
         </form>
+      {:else}
+        <div class="access-form">
+          <div><span class="step-label">{t('googleMethod')}</span><h2>{t('googleHeading')}</h2></div>
+          <p class="fine-print">{config.google_login_enabled ? t('googleEnabled') : t('googleDisabled')}</p>
+          {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
+          {#if config.google_login_enabled}
+            <a class="primary large google-sso-link" href="/api/v1/auth/google/start">{t('googleContinue')}</a>
+          {:else}
+            <button class="primary large" type="button" disabled>{t('googleContinue')}</button>
+          {/if}
+        </div>
       {/if}
     </div>
   </section>
@@ -185,7 +202,6 @@
       <div><p class="eyebrow">{t('clearByDesign')}</p><h2>{t('permanentNotVault')}</h2></div>
       <div class="privacy-copy">
         <p>{t('permanentText')}</p>
-        <p><strong>{t('privacyWarning')}</strong> {t('privacyText')}</p>
       </div>
     </div>
   </section>

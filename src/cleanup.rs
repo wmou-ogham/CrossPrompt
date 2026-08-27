@@ -66,6 +66,7 @@ mod tests {
             cookie_secure: false,
             trust_proxy: false,
             smtp: None,
+            google_oauth: None,
         };
         let pool = db::connect(&config).await.unwrap();
         let state = AppState::new(config, pool.clone()).unwrap();
