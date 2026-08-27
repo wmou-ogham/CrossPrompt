@@ -70,9 +70,11 @@ label { display: grid; gap: 7px; color: #3d4945; font-size: 12px; font-weight: 7
 .fine-print { font-size: 11px; color: #8c9994; line-height: 1.55; margin: 0; }
 .turnstile { min-height: 65px; }
 .access-panel { align-content: start; }
-.access-tabs { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid #46605a; }
-.access-tabs button { color: #aebdb7; border-bottom: 3px solid transparent; padding: 10px 7px 12px; font-size: 11px; }
+.access-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid #46605a; }
+.access-tabs button { color: #aebdb7; border-bottom: 3px solid transparent; padding: 10px 4px 12px; font-size: 10px; }
 .access-tabs button:hover, .access-tabs button.active { color: var(--lime); border-bottom-color: var(--lime); }
+.google-sso-link { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.google-bind-row { margin-top: 12px; }
 .access-form { display: grid; gap: 20px; }
 .access-notice { color: #dff7e9; background: #1b5946; border: 1px solid #41816c; padding: 11px 13px; margin: 0; font-size: 12px; line-height: 1.5; }
 .panel-link { color: #cbd8d3; text-decoration: underline; text-underline-offset: 4px; justify-self: start; padding: 3px 0; }
@@ -91,7 +93,6 @@ label { display: grid; gap: 7px; color: #3d4945; font-size: 12px; font-weight: 7
 .privacy-strip { background: var(--navy); color: white; padding: 90px 0; }
 .privacy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 100px; }
 .privacy-strip .eyebrow { color: var(--lime); }
-.privacy-copy strong { color: #fff; }
 .site-footer { min-height: 110px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
 .site-footer span:first-child { color: var(--ink); font-weight: 800; }
 
@@ -165,8 +166,19 @@ label { display: grid; gap: 7px; color: #3d4945; font-size: 12px; font-weight: 7
 .editor-grid > textarea { border: 0; border-right: 1px solid var(--line); padding: 20px; resize: vertical; min-height: 310px; font: 13px/1.65 "SFMono-Regular", Consolas, monospace; box-shadow: none; }
 .preview { min-width: 0; padding: 20px; overflow: auto; background: #fff; }
 .preview-label { display: block; font: 700 9px monospace; color: var(--green); letter-spacing: .12em; margin-bottom: 18px; text-transform: uppercase; }
+.skill-meta { margin: 0 0 22px; padding: 14px 16px 16px; border: 1px solid var(--line); border-left: 3px solid var(--green); background: #f0f3ec; }
+.skill-meta-label { display: block; font: 700 9px monospace; color: var(--green); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 12px; }
+.skill-meta-key, .skill-meta-fields dt { display: block; font: 700 9px/1.2 "SFMono-Regular", Consolas, monospace; color: var(--muted); letter-spacing: .06em; margin-bottom: 4px; }
+.skill-meta-name, .skill-meta-description { margin: 0 0 12px; }
+.skill-meta-name:last-child, .skill-meta-description:last-child { margin-bottom: 0; }
+.skill-meta-name code { display: inline-block; background: transparent; padding: 0; font-size: 15px; font-weight: 760; color: var(--ink); overflow-wrap: anywhere; }
+.skill-meta-description { color: var(--ink); font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.skill-meta-fields { margin: 12px 0 0; display: grid; gap: 10px; }
+.skill-meta-fields dd { margin: 0; font: 13px/1.5 "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
+.skill-meta-raw { margin: 0; padding: 0; background: transparent; font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
 .markdown { font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
 .markdown h1, .markdown h2, .markdown h3 { line-height: 1.22; margin-top: 1.4em; }
+.markdown > :first-child { margin-top: 0; }
 .markdown pre { padding: 13px; background: #edf0e9; overflow: auto; }
 .markdown code { background: #edf0e9; padding: 2px 4px; }
 .markdown blockquote { border-left: 3px solid var(--green); margin-left: 0; padding-left: 15px; color: var(--muted); }

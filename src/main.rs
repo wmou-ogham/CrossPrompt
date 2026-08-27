@@ -7,6 +7,7 @@ mod config;
 mod db;
 mod email_auth;
 mod error;
+mod google_auth;
 mod models;
 mod notifications;
 mod openapi;
@@ -66,6 +67,8 @@ fn router(state: AppState) -> Router {
         .route("/email/login/request-code", post(email_auth::request_login_code))
         .route("/email/login/verify", post(email_auth::verify_login_code))
         .route("/email/session", delete(email_auth::logout_email))
+        .route("/auth/google/start", get(google_auth::start_login).post(google_auth::start_bind))
+        .route("/auth/google/callback", get(google_auth::callback))
         .route(
             "/vault",
             get(api::get_vault)
@@ -614,6 +617,7 @@ mod tests {
             cookie_secure: false,
             trust_proxy: false,
             smtp: None,
+            google_oauth: None,
         }
     }
 

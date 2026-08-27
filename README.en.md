@@ -65,6 +65,22 @@ CROSSPROMPT_SMTP_FROM=CrossPrompt <no-reply@example.com>
 
 Codes are six digits, valid for ten minutes, limited to five attempts, and stored only as keyed digests. Email sessions are 30-day HttpOnly/SameSite cookies (Secure in production). Rotating a Vault secret invalidates all email sessions.
 
+## Google SSO
+
+Google sign-in is an alternate path into the same Email Vault session. A Google account’s **verified email** maps to one Vault: the first sign-in **creates** that Vault; later visits reopen it. Leave the variables empty to keep Google login disabled.
+
+1. Create an OAuth client ID (Web application) in [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials).
+2. Set Authorized JavaScript origins to `CROSSPROMPT_PUBLIC_BASE_URL`.
+3. Set Authorized redirect URI to `{CROSSPROMPT_PUBLIC_BASE_URL}/api/v1/auth/google/callback`.
+4. Copy values from [`google-oauth.env.example`](google-oauth.env.example) into `.env`:
+
+```dotenv
+CROSSPROMPT_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+CROSSPROMPT_GOOGLE_CLIENT_SECRET=your-client-secret
+```
+
+5. Rebuild or restart the service. The landing page shows a Google tab; Vault settings can bind or replace email via Google.
+
 ## Data and limits
 
 - Up to 100 Vaults per IP per day.

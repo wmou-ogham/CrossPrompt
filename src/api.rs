@@ -404,6 +404,7 @@ pub async fn config_public(State(state): State<AppState>) -> Json<Value> {
         "turnstile_site_key": state.config.turnstile_site_key,
         "turnstile_required": state.config.turnstile_secret_key.is_some(),
         "email_login_enabled": state.config.smtp.is_some(),
+        "google_login_enabled": state.config.google_oauth.is_some(),
         "public_base_url": state.config.public_base_url,
     }))
 }

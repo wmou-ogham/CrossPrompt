@@ -100,6 +100,34 @@ CROSSPROMPT_SMTP_FROM=CrossPrompt <no-reply@example.com>
 - 輪替 Vault secret 會一併使所有既有 Email Session 失效。
 - 解除 Email 綁定必須使用 Bearer secret，並立即撤銷所有 Email Session。
 
+## Google SSO 登入
+
+Google 登入是 Email Session 的替代入口。Google 帳號的**已驗證 Email** 會對應到一個 Vault：若尚未綁定則**自動建立**新 Vault；若已綁定則直接登入。未設定時服務仍可啟動，前端會標示 Google 登入不可用。
+
+1. 到 [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials) 建立 **OAuth client ID**（應用程式類型選 **Web application**）。
+2. Authorized JavaScript origins 填 `CROSSPROMPT_PUBLIC_BASE_URL`（例如 `https://crossprompt.example.com`）。
+3. Authorized redirect URI 填：
+
+```text
+{CROSSPROMPT_PUBLIC_BASE_URL}/api/v1/auth/google/callback
+```
+
+4. 把 Client ID / Secret 填入環境變數（可複製 [`google-oauth.env.example`](google-oauth.env.example) 或 [`.env.example`](.env.example)）：
+
+```dotenv
+CROSSPROMPT_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+CROSSPROMPT_GOOGLE_CLIENT_SECRET=your-client-secret
+```
+
+5. 重建／重啟服務。首頁會出現 Google 分頁；Vault 設定也可直接用 Google 綁定或更換 Email。
+
+安全行為：
+
+- 僅接受 Google 回傳且 `email_verified` 的信箱。
+- OAuth `state` 以 HMAC 簽名後交給 Google 帶回（不依賴瀏覽器 Cookie，避免反向代理／跨站 redirect 弄丟 state）。
+- 登入／綁定成功後建立與 Email OTP 相同的 30 天 Vault Session Cookie。
+- 綁定時若 Email 已被其他 Vault 使用會回傳衝突；更換綁定會撤銷該 Vault 既有 Email Session。
+
 ## 使用者資料規則
 
 - 每個 IP 每日最多建立 100 個 Vault。
